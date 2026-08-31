@@ -70,13 +70,25 @@ create policy "users_update_own_profile"
   on public.profiles for update
   using (auth.uid() = id);
 
--- Admin + super_admin can read all profiles
+-- Admin + super_admin can read all profiles.
+-- Uses a SECURITY DEFINER helper to avoid infinite recursion (a policy
+-- that selects from profiles within a profiles policy recurses).
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role in ('admin', 'super_admin')
+  );
+$$;
+
+revoke execute on function public.is_admin() from public, anon;
+grant execute on function public.is_admin() to authenticated;
+
 create policy "admins_read_all_profiles"
   on public.profiles for select
-  using (
-    exists (
-      select 1 from public.profiles p
-      where p.id = auth.uid()
-        and p.role in ('admin', 'super_admin')
-    )
-  );
+  using (public.is_admin());

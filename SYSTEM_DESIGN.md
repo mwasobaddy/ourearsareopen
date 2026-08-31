@@ -70,23 +70,29 @@ Handles registration, login, session persistence, password reset, email verifica
 
 ## Module 2: User Profile & Onboarding
 
-**Status:** ⚪
+**Status:** 🟡
 
 Completes the user's profile after signup (the `/profile/setup` wizard), personal info, and preferences. Optional assigned-listener link.
 
 ### TO-DO
-- [ ] Build `profiles` table schema (name, phone, avatar, pronouns, age range, reason, services consent)
-- [ ] Profile CRUD via `lib/supabase/client.ts` (insert/update own profile)
-- [ ] Wire `/register` → redirects to `/profile/setup` when profile incomplete
-- [ ] Implement 3-step `/profile/setup` wizard with real save per step
-- [ ] Avatar upload to Supabase Storage (`avatars` bucket)
-- [ ] Profile completion state + redirect guard (if not complete, force setup)
-- [ ] Wire `/profile` tabs: Conversations, Documents, Info, Settings to real data
-- [ ] Preferences (gender, religion, language, orientation) stored + used in booking
-- [ ] Assigned listener link (optional) — customer ↔ listener relationship
+- [x] `profiles` table schema extended: +`country`, `gender_identity`, `sexual_orientation`, `relationship_status`, `religion_importance`, `spiritual`, `prior_therapy`, and self-referencing `assigned_listener_id` FK (migration `0003`)
+- [x] `avatars` storage bucket + per-user RLS (paths namespaced `<uid>/`) (migration `0003`)
+- [x] Profile CRUD via `lib/supabase/client.ts` (owner select/update; admin read via `is_admin()` helper)
+- [x] 3-step `/profile/setup` wizard (`components/profile/profile-setup-wizard.tsx`) with real per-step save + avatar upload → sets `profile_complete`
+- [x] `/profile/setup` is a server page (auth-guarded, loads profile, `?next=` return param)
+- [x] `/profile` (`components/profile/profile-view.tsx`) wired to real data: header (name/email/avatar/member-since), Info tab (all fields), Settings tab (avatar edit, change password, delete account); Conversations/Documents left as empty states (depend on Modules 3/5)
+- [x] `delete_my_account` SECURITY DEFINER RPC (migration `0004`) for self-service account deletion
+- [x] Completion guard helper `lib/require-profile.ts` (redirects incomplete profiles to `/profile/setup`) — ready to apply to booking routes
+- [x] Fixed infinite-recursion in `admins_read_all_profiles` via `is_admin()` SECURITY DEFINER helper (migration `0005`)
+- [x] End-to-end verified: signup trigger → profile read → full update → avatar upload → delete account (via admin-created confirmed test user)
+- [ ] Assigned listener link UI (customer ↔ listener) — column exists; UI deferred until listener profiles (Module 3+/admin) exist
+- [ ] `isProfileComplete` client-side shortcut / booking-route guard wiring (deferred to Module 3)
 
 ### Questions
-- (none yet)
+- ✅ **Resolved:** Added preference columns (gender, religion, orientation, etc.) as flexible `text` to keep the self-describe/"prefer not to say" options generic across all matching preferences.
+- ✅ **Resolved:** Avatar storage bucketed as `avatars/<uid>/<file>` (public reads, owner-only writes) — collisions avoided by per-user path.
+- ❓ **Pending (Module 3):** Whether booking should enforce strict completion (guard) vs. soft prompt. `require-profile.ts` supports either; default will be strict redirect, overridable per-route.
+- ❓ **Pending (listener/admin):** Assigned-listener matching logic and how listeners get tagged as `listener` role (admin workflow not yet built).
 
 ---
 
