@@ -14,20 +14,22 @@
 
 ## Setup: Project Foundation (Phase 0)
 
-**Status:** ⚪
+**Status:** 🟡
 
 ### TO-DO
-- [ ] Install `@supabase/supabase-js` and `@supabase/ssr` dependencies
-- [ ] Create `lib/supabase/client.ts` (browser client)
-- [ ] Create `lib/supabase/server.ts` (server-side cookie client)
-- [ ] Create `lib/supabase/admin.ts` (service-role client, server-only)
-- [ ] Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-- [ ] Create `supabase/migrations/` folder for SQL migrations
+- [x] Install `@supabase/supabase-js` and `@supabase/ssr` dependencies
+- [x] Create `lib/supabase/client.ts` (browser client)
+- [x] Create `lib/supabase/server.ts` (server-side cookie client)
+- [x] Create `lib/supabase/admin.ts` (service-role client, server-only)
+- [x] Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (service role key still missing)
+- [x] Create `supabase/migrations/` folder for SQL migrations
+- [ ] Get `SUPABASE_SERVICE_ROLE_KEY` from dashboard
 - [ ] Wire Supabase Auth into `hooks/use-auth.ts` to replace the stub
 - [ ] Verify build passes (`pnpm build`) after wiring
 
 ### Questions
-- (none yet)
+- ❓ **Project connection:** The MCP tooling is connected to `zlqairttoyxbxwccwrhb` (different project from our keys `cxwrvstojafdjqvelbno`). MCP migrations can't be applied to our project directly. **Decision:** Apply SQL via our project's SQL editor, or reconnect MCP to `cxwrvstojafdjqvelbno`. (Asked: MCP connected to wrong project — user chose to use `cxwrvstojafdjqvelbno`.)
+- ❓ **Service role key:** Needed for `lib/supabase/admin.ts` and server-side admin ops. Must be obtained from Supabase Dashboard → Settings → API. Treat as secret (server-only).
 
 ---
 
