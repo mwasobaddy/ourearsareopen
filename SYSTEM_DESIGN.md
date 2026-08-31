@@ -9,6 +9,15 @@
 - When a task is complete, change its checkbox from `- [ ]` to `- [x]` and update the module status icon to `🟢`.
 - Each module has a **Questions** section — log any open questions, decisions needed, or blockers here as they arise during that module's build.
 - Cross off tasks as you finish to keep the tracker accurate.
+- Each module MUST include a **How to test** section — concrete manual steps that let the developer (or client) verify the module's implementation independently before moving on. Write the test steps as you build, and confirm each one passes before marking the module 🟢.
+
+**How to run the app for testing:**
+1. `pnpm install` (first time)
+2. `cp .env.example .env.local` and fill in the Supabase URL + anon key + service-role key (never commit `.env.local`)
+3. `pnpm dev` → open `http://localhost:3000`
+4. `pnpm build` → must complete with no errors (this is the source of truth for type/build correctness)
+
+> Note: tests are **manual** right now (no framework installed). Each module's "How to test" section below is the checklist to run. When a module depends on a service (email via Resend, payments via Stripe, SMS/calls via Twilio), those items are marked **Blocked until client provides credentials** — test what you can with the rest working.
 
 ---
 
@@ -56,6 +65,29 @@ Handles registration, login, session persistence, password reset, email verifica
 - [ ] Admin/super-admin role-gated route protection (middleware reads role)
 - [ ] Verify all role-based nav links render correctly in navbar
 
+### How to test — Module 1
+Run with `pnpm dev` (open `http://localhost:3000`). Recommended: create a fresh test account each time.
+
+**Registration**
+1. Visit `/register`. Fill the form and submit.
+2. If email confirmation is ON (needs client's dashboard toggle + Resend): you should see the **"Check your email"** screen — do NOT get sent to profile setup. Open the verification email, click the link, then log in. *(Blocked until client configures Resend + toggles "Confirm email".)*
+3. If email confirmation is OFF: after submit you're redirected to `/profile/setup`.
+4. In Supabase Dashboard → Authentication → Users, confirm a `profiles` row was auto-created for the new user with `role = customer`.
+
+**Login / Logout**
+5. Log out (navbar). Visit `/profile` while logged out → you're redirected to `/login`. `/book-listener`, `/payment`, `/chat-queue`, `/session` behave the same.
+6. Log in with the test account → you return to the app (role-based home). Log out again → auth pages (`/login`, `/register`, `/forgot-password`) are blocked once logged in (redirected away).
+
+**Password reset (works without an email provider? — No, needs Resend)**
+7. `/forgot-password` → enter email → "If that account exists, a reset link was sent." *(Blocked until Resend configured.)*
+8. `/reset-password?code=...` flow completes a real password change. Can only be end-to-end tested once email sending works.
+
+**Quick DB-level check (developer)**
+```sql
+select id, email, role, profile_complete from public.profiles;
+```
+Rows appear on each signup automatically.
+
 ### Questions
 - ✅ **Resolved:** MCP reconnected to `cxwrvstojafdjqvelbno` (was on `zlqairttoyxbxwccwrhb`). Migration tooling now works directly.
 - ✅ **Resolved:** Service role key added to `.env.local` (local only, never committed).
@@ -94,6 +126,26 @@ Completes the user's profile after signup (the `/profile/setup` wizard), persona
 - ❓ **Pending (Module 3):** Whether booking should enforce strict completion (guard) vs. soft prompt. `require-profile.ts` supports either; default will be strict redirect, overridable per-route.
 - ❓ **Pending (listener/admin):** Assigned-listener matching logic and how listeners get tagged as `listener` role (admin workflow not yet built).
 
+### How to test — Module 2
+Log in as a consumer account (create one via `/register`; email confirmation may need to be off for now).
+
+**Profile setup wizard**
+1. Visit `/profile/setup`. Step 1 (Personal Details): upload an avatar photo — the thumbnail updates and a toast says "Photo updated"; set name/pronouns/age/country. Click **Save & Continue**.
+2. Step 2 (About You): pick gender/orientation/relationship/religion/spiritual/therapy. **Save & Continue**.
+3. Step 3 (Review): add an optional reason + check the consent box. Click **Finish & Continue** → redirected to `/profile`.
+4. In Supabase Dashboard → Table Editor → `profiles`, confirm the row for your user now has **all** fields filled and `profile_complete = true`.
+
+**Profile page + persistence**
+5. On `/profile`, confirm the header shows your **real** name, email, and your uploaded avatar; badges show "Member since …" and "Profile complete".
+6. Info tab lists every field you entered. Settings tab shows Notifications, Security, Payment Methods (coming soon), Change Password.
+7. Log out and back in → all your data still shows (persists in DB).
+
+**Avatar storage check (developer)**
+In Supabase Dashboard → Storage → `avatars`, confirm a file exists at `<your-user-id>/avatar.*`. Try uploading again — it overwrites (no duplicate).
+
+**Delete account**
+8. Settings → **Delete Account**. Confirm the dialog. The `profiles` row and `auth.users` row for the user should be gone from the Dashboard, and visiting `/profile` again forces a login.
+
 ---
 
 ## Module 3: Booking (Scheduled Sessions)
@@ -115,6 +167,15 @@ The book-listener multi-step flow: choose phone/chat type, concern, listener pre
 
 ### Questions
 - (none yet)
+
+### How to test — Module 3
+Fill in as Module 3 is built. Expected checklist:
+1. With a profile-complete consumer, visit `/book-listener`. Each of the 5 steps saves and can be revisited (Back/Continue).
+2. On submit, a `bookings` row is created with the correct `user_id`, `type`, `concern`, `preferences`, `slot`, and `status` (e.g. `pending`/`confirmed`).
+3. `/profile` → Conversations tab lists the new booking under Upcoming.
+4. Cancelling / rescheduling updates the row and frees the slot.
+5. RLS: another user cannot read/modify your booking; a listener sees only assigned bookings; admin sees all.
+6. Email confirmation on booking *(Blocked until Resend configured).*
 
 ---
 
@@ -140,6 +201,16 @@ All money movement: booking payment, one-off donations, chat-queue minimum payme
 ### Questions
 - (none yet)
 
+### How to test — Module 4
+Fill in as Module 4 is built (Stripe). Expected checklist:
+1. With real Stripe test keys, book a session → `/payment` creates a PaymentIntent and the card form completes a test payment (`4242 4242 4242 4242`).
+2. A `payments` row is created; the booking is only marked confirmed **after** the Stripe webhook succeeds, not on the client.
+3. Webhook signature is verified — forging/replaying fails.
+4. Donate flow creates a one-off PaymentIntent + successful `payments` row.
+5. Saved payment methods can be added/list/removed.
+6. Refund initiated by admin updates the Stripe charge + local status.
+7. *Blocked until the client provides Stripe keys (test + live).*
+
 ---
 
 ## Module 5: Open Chat Queue
@@ -162,6 +233,14 @@ Users pay minimum ($1) to join a live queue; the next available listener is assi
 ### Questions
 - (none yet)
 
+### How to test — Module 5
+Fill in as Module 5 is built. Expected checklist:
+1. Paying the $1 minimum and joining `/chat-queue` inserts a `queue_entries` row with `status = waiting`.
+2. The widget shows a realtime position that decrements as earlier customers are assigned.
+3. When a listener toggles available, the next waiting customer is auto-assigned and both see the pairing update in realtime.
+4. Leaving the queue updates status (and refunds if applicable).
+5. RLS: a customer sees only their own entry; a listener sees the waiting pool; admin sees all.
+
 ---
 
 ## Module 6: Realtime — Voice & Chat
@@ -182,6 +261,15 @@ In-session chat (real-time text) and voice calls (phone appointments). Voice via
 
 ### Questions
 - (none yet)
+
+### How to test — Module 6
+Fill in as Module 6 is built. Expected checklist:
+1. On `/session/[id]`, opening two browser tabs as customer + listener shows messages appearing in realtime via Supabase Realtime (no page refresh).
+2. A `sessions` row is created/updated with correct status transitions.
+3. `app/api/twilio/token` mints a valid access token (call via website Twilio SDK — **Blocked until client provides Twilio credentials**).
+4. Listener-initiated outbound call connects and call start/end are recorded.
+5. "Listener joined"/"Listener left" status notifications appear in the session.
+6. Voice duration is recorded for hours tracking.
 
 ---
 
@@ -208,6 +296,17 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 ### Questions
 - (none yet)
 
+### How to test — Module 7
+Fill in as Module 7 is built. Expected checklist:
+1. Admin creates a listener account (username). Listener logs in with the temp password and is forced to set a real one on first login.
+2. Listener is redirected to `/team-member` portal (not the consumer app).
+3. Listener sets availability schedule + queue toggle; a `listeners` row reflects it.
+4. Listener views the assigned consumer's profile + signup answers before a session.
+5. Voice/chat session starts from the dashboard.
+6. Safety disconnect button records a reason.
+7. Weekly hours tracked; 14-min warning + auto-end at 15; manual extension works; a 15hr/week cap blocks further sessions.
+8. Follow-up booking with a paid consumer sends a payment link to the consumer's email (listener never sees payment).
+
 ---
 
 ## Module 8: Session & Call Management
@@ -229,6 +328,16 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 
 ### Questions
 - (none yet)
+
+### How to test — Module 8
+Fill in as Module 8 is built. Expected checklist:
+1. A booked session moves through `scheduled → in_progress → completed` (or `no_show`/`cancelled`) correctly.
+2. Private/shared notes saved per session are visible only to the intended team members for that consumer.
+3. Customer session history shows past sessions with listener/type/documents.
+4. A PDF of session notes downloads from the `documents` row.
+5. Automatic post-session email (synopsis) is sent *(Blocked until Resend configured)*.
+6. No-show handling frees the slot.
+7. 24h + 15-min reminders fire *(Blocked until email/SMS configured)*.
 
 ---
 
@@ -253,6 +362,18 @@ Operations portal: listener management, session oversight, reports, content, ref
 ### Questions
 - (none yet)
 
+### How to test — Module 9
+Fill in as Module 9 is built. Expected checklist:
+1. `/admin` is only reachable by an `admin`/`super_admin`; non-admins get redirected.
+2. Admin dashboard stats render real counts.
+3. Listener add/remove/deactivate workflow works end-to-end.
+4. Hours dashboard matches the 15hr/week data.
+5. Chat/phone session list shows accurate duration/status.
+6. User list search + profile view + delete/reinstate works.
+7. Community room content edits persist.
+8. Reports feed correct data to charts.
+9. Refund + internal support notes workflow works.
+
 ---
 
 ## Module 10: Super Admin
@@ -273,6 +394,17 @@ Platform ownership: org config, feature flags, Stripe/billing config, role assig
 
 ### Questions
 - (none yet)
+
+### How to test — Module 10
+Fill in as Module 10 is built. Expected checklist:
+1. `/super-admin` is only reachable by a `super_admin`; everyone else is redirected.
+2. Platform health dashboard shows real revenue/counts/alerts.
+3. `org_config` edits (name, logo, support email, crisis links, timezone) reflect on the site.
+4. Feature flags toggles turn queue/donations/free-booking on/off.
+5. Stripe products/prices configured through the UI.
+6. Role assignment promotes/demotes admin & listener correctly.
+7. Sensitive actions write `audit_log` entries.
+8. System notifications (email/SMS) send with configured templates.
 
 ---
 
@@ -295,6 +427,14 @@ Community rooms, crisis content, and the full email system.
 
 ### Questions
 - (none yet)
+
+### How to test — Module 11
+Fill in as Module 11 is built. Expected checklist:
+1. Community room titles/descriptions/order editable by admin and reflected on the public community page.
+2. Crisis content editable and displayed correctly.
+3. New free signup triggers a verification email with a working button redirect *(Blocked until Resend configured)*.
+4. Booking confirmed → confirmation email; paid follow-up → payment link; any payment → receipt; post-session → synopsis email *(all Blocked until Resend configured)*.
+5. Emails to team members/consumers send with correct templates (ongoing).
 
 ---
 
