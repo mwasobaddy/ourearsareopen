@@ -1,19 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { Suspense } from "react";
 import { Logo } from "@/components/logo";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { RegisterForm } from "@/components/auth/register-form";
 
 export const metadata: Metadata = {
   title: "Sign Up | Our Ears Are Open",
@@ -87,208 +78,24 @@ export default function RegisterPage({
                 </p>
               </CardHeader>
               <CardContent>
-                <form className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName">First Name</Label>
-                      <Input id="firstName" placeholder="First name" required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName">Last Name</Label>
-                      <Input id="lastName" placeholder="Last name" required />
-                    </div>
-                  </div>
+                <Suspense fallback={null}>
+                  <RegisterForm />
+                </Suspense>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      required
-                    />
-                  </div>
+                <p className="mt-4 text-center text-xs text-muted-foreground">
+                  After creating your account, you will complete a short
+                  profile questionnaire before booking your first conversation.
+                </p>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="Create a password"
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Must be at least 8 characters
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="ageRange">Age range (18+ only)</Label>
-                    <Select>
-                      <SelectTrigger id="ageRange">
-                        <SelectValue placeholder="Select your age range" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="18-24">18-24</SelectItem>
-                        <SelectItem value="25-34">25-34</SelectItem>
-                        <SelectItem value="35-44">35-44</SelectItem>
-                        <SelectItem value="45-54">45-54</SelectItem>
-                        <SelectItem value="55-64">55-64</SelectItem>
-                        <SelectItem value="65+">65+</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      You must be 18 or older to use our platform. Minimum age is 18.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="pronouns">Pronouns (Optional)</Label>
-                    <Select>
-                      <SelectTrigger id="pronouns">
-                        <SelectValue placeholder="Select your pronouns" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="he-him">He/Him</SelectItem>
-                        <SelectItem value="she-her">She/Her</SelectItem>
-                        <SelectItem value="they-them">They/Them</SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                        <SelectItem value="prefer-not">
-                          Prefer not to say
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="reason">
-                      What brings you to Our Ears Are Open?
-                    </Label>
-                    <Select>
-                      <SelectTrigger id="reason">
-                        <SelectValue placeholder="Select primary reason" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="anxiety">
-                          Anxiety or Stress
-                        </SelectItem>
-                        <SelectItem value="depression">Depression</SelectItem>
-                        <SelectItem value="relationships">
-                          Relationship Issues
-                        </SelectItem>
-                        <SelectItem value="trauma">
-                          Trauma or PTSD
-                        </SelectItem>
-                        <SelectItem value="grief">Grief or Loss</SelectItem>
-                        <SelectItem value="self-improvement">
-                          Self Improvement
-                        </SelectItem>
-                        <SelectItem value="other">Other</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Services</Label>
-                    <p className="text-xs text-muted-foreground">
-                      We only offer chat conversations, phone conversations, or both.
-                    </p>
-                    <div className="grid gap-2 pt-1">
-                      <div className="flex items-center space-x-2">
-                        <Checkbox id="service-chat" />
-                        <Label
-                          htmlFor="service-chat"
-                          className="text-sm font-normal"
-                        >
-                          Chat conversations
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox id="service-phone" />
-                        <Label
-                          htmlFor="service-phone"
-                          className="text-sm font-normal"
-                        >
-                          Phone conversations
-                        </Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox id="service-both" />
-                        <Label
-                          htmlFor="service-both"
-                          className="text-sm font-normal"
-                        >
-                          Both
-                        </Label>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 border-t border-border pt-4">
-                    <div className="flex items-start space-x-2">
-                      <Checkbox id="privacy" required />
-                      <Label
-                        htmlFor="privacy"
-                        className="text-sm font-normal leading-relaxed"
-                      >
-                        I agree to the{" "}
-                        <Link
-                          href="/privacy"
-                          className="text-primary hover:underline"
-                        >
-                          Privacy Policy
-                        </Link>{" "}
-                        and{" "}
-                        <Link
-                          href="/terms"
-                          className="text-primary hover:underline"
-                        >
-                          Terms of Service
-                        </Link>
-                      </Label>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Checkbox id="ageConfirm" required />
-                      <Label
-                        htmlFor="ageConfirm"
-                        className="text-sm font-normal leading-relaxed"
-                      >
-                        I confirm I am 18 years or older (minimum age to use this platform)
-                      </Label>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <Checkbox id="consent" required />
-                      <Label
-                        htmlFor="consent"
-                        className="text-sm font-normal leading-relaxed"
-                      >
-                        I consent to Our Ears Are Open contacting me about services
-                        and resources
-                      </Label>
-                    </div>
-                  </div>
-
-                  <Button type="submit" className="w-full" size="lg" asChild>
-                    <Link href="/profile/setup">
-                      Create Account &amp; Continue
-                    </Link>
-                  </Button>
-
-                  <p className="text-center text-xs text-muted-foreground">
-                    After creating your account, you will complete a short
-                    profile questionnaire before booking your first conversation.
-                  </p>
-
-                  <p className="text-center text-sm text-muted-foreground">
-                    Already have an account?{" "}
-                    <Link
-                      href={loginHref}
-                      className="text-primary hover:underline"
-                    >
-                      Log in
-                    </Link>
-                  </p>
-                </form>
+                <p className="mt-3 text-center text-sm text-muted-foreground">
+                  Already have an account?{" "}
+                  <Link
+                    href={loginHref}
+                    className="text-primary hover:underline"
+                  >
+                    Log in
+                  </Link>
+                </p>
               </CardContent>
             </Card>
           </div>

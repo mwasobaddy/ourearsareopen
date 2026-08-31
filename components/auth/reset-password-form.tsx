@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface ResetPasswordFormProps {
@@ -12,6 +14,7 @@ interface ResetPasswordFormProps {
 }
 
 export function ResetPasswordForm({ token, className }: ResetPasswordFormProps) {
+  const supabase = createClient();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -19,12 +22,34 @@ export function ResetPasswordForm({ token, className }: ResetPasswordFormProps) 
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password !== confirmPassword) return;
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
     setIsLoading(true);
-    // TODO: POST /api/auth/reset-password with token
-    await new Promise((r) => setTimeout(r, 500));
-    setSubmitted(true);
+
+    // Supabase recovery links arrive with a `code` that must be exchanged
+    // for a session before updating the password.
+    if (token) {
+      const { error: exchangeError } =
+        await supabase.auth.exchangeCodeForSession(token);
+      if (exchangeError) {
+        toast.error(exchangeError.message || "Invalid reset link");
+        setIsLoading(false);
+        return;
+      }
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+
     setIsLoading(false);
+
+    if (error) {
+      toast.error(error.message || "Unable to reset password");
+      return;
+    }
+
+    setSubmitted(true);
   }
 
   if (!token) {

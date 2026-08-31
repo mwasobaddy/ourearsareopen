@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 interface ForgotPasswordFormProps {
@@ -11,6 +13,7 @@ interface ForgotPasswordFormProps {
 }
 
 export function ForgotPasswordForm({ className }: ForgotPasswordFormProps) {
+  const supabase = createClient();
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,10 +21,19 @@ export function ForgotPasswordForm({ className }: ForgotPasswordFormProps) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setIsLoading(true);
-    // TODO: POST /api/auth/forgot-password
-    await new Promise((r) => setTimeout(r, 500));
-    setSubmitted(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
     setIsLoading(false);
+
+    if (error) {
+      toast.error(error.message || "Unable to send reset link");
+      return;
+    }
+
+    setSubmitted(true);
   }
 
   if (submitted) {

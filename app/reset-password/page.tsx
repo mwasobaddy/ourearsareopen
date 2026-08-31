@@ -9,11 +9,11 @@ export const metadata: Metadata = {
 };
 
 interface ResetPasswordPageProps {
-  searchParams: Promise<{ token?: string }>;
+  searchParams: Promise<{ token?: string; code?: string }>;
 }
 
 export default async function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
-  const { token } = await searchParams;
+  const { token, code } = await searchParams;
 
   return (
     <section className="flex min-h-[calc(100vh-12rem)] items-center justify-center py-12">
@@ -29,7 +29,7 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
         <p className="mt-2 text-muted-foreground">
           Enter your new password below.
         </p>
-        <ResetPasswordForm token={token} className="mt-6" />
+        <ResetPasswordForm token={token ?? code} className="mt-6" />
       </div>
     </section>
   );

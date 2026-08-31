@@ -12,6 +12,7 @@ import {
 import { Menu, Phone, User, LayoutDashboard, Shield } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useAuth } from "@/hooks/use-auth";
+import { LogoutButton } from "@/components/auth/logout-button";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -74,9 +75,7 @@ export function Navbar() {
               </Button>
             </Link>
           )}
-          <Link href="/login">
-            <Button variant="ghost" size="sm">Log out</Button>
-          </Link>
+          <LogoutButton />
         </>
       ) : (
         <>
@@ -186,11 +185,9 @@ export function Navbar() {
                         </Button>
                       </Link>
                     )}
-                    <Link href="/login" onClick={() => setIsOpen(false)}>
-                      <Button variant="outline" className="w-full bg-transparent">
-                        Log out
-                      </Button>
-                    </Link>
+                    <div onClick={() => setIsOpen(false)}>
+                      <LogoutButton />
+                    </div>
                   </>
                 ) : (
                   <>

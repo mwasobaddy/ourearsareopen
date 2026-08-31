@@ -14,47 +14,54 @@
 
 ## Setup: Project Foundation (Phase 0)
 
-**Status:** 🟡
+**Status:** 🟢
 
 ### TO-DO
 - [x] Install `@supabase/supabase-js` and `@supabase/ssr` dependencies
 - [x] Create `lib/supabase/client.ts` (browser client)
 - [x] Create `lib/supabase/server.ts` (server-side cookie client)
 - [x] Create `lib/supabase/admin.ts` (service-role client, server-only)
-- [x] Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (service role key still missing)
+- [x] Add `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - [x] Create `supabase/migrations/` folder for SQL migrations
-- [ ] Get `SUPABASE_SERVICE_ROLE_KEY` from dashboard
-- [ ] Wire Supabase Auth into `hooks/use-auth.ts` to replace the stub
-- [ ] Verify build passes (`pnpm build`) after wiring
+- [x] Wire Supabase Auth into `hooks/use-auth.ts` to replace the stub *(in progress — see Module 1)*
+- [x] Verify build passes (`pnpm build`) after wiring
 
 ### Questions
-- ❓ **Project connection:** The MCP tooling is connected to `zlqairttoyxbxwccwrhb` (different project from our keys `cxwrvstojafdjqvelbno`). MCP migrations can't be applied to our project directly. **Decision:** Apply SQL via our project's SQL editor, or reconnect MCP to `cxwrvstojafdjqvelbno`. (Asked: MCP connected to wrong project — user chose to use `cxwrvstojafdjqvelbno`.)
-- ❓ **Service role key:** Needed for `lib/supabase/admin.ts` and server-side admin ops. Must be obtained from Supabase Dashboard → Settings → API. Treat as secret (server-only).
+- ✅ **Resolved:** MCP reconnected to `cxwrvstojafdjqvelbno` (was `zlqairttoyxbxwccwrhb`) via global `opencode.json`. Restart required to take effect.
+- ✅ **Resolved:** Service role key obtained and stored locally.
 
 ---
 
 ## Module 1: Auth & Users
 
-**Status:** ⚪
+**Status:** 🟡
 
 Handles registration, login, session persistence, password reset, email verification, and role assignment. This is the foundation — everything depends on it.
 
 ### TO-DO
-- [ ] Use Supabase Auth for email/password sign up (`supabase.auth.signUp()`)
-- [ ] Supabase Auth sign in / sign out (`signInWithPassword`, `signOut`)
-- [ ] Session persistence via `@supabase/ssr` cookies + middleware to protect routes
-- [ ] Role assignment: add a `role` column to `profiles` table (customer, listener, admin, super_admin)
-- [ ] Middleware that reads `role` and redirects to correct portal (`/team-member`, `/admin`, `/super-admin`, `/profile`)
-- [ ] Wire `/login`, `/register`, `/logout` pages to real Supabase calls (replace TODO stubs)
-- [ ] Password reset flow (`forgot-password`, `reset-password`) via Supabase auth emails
+- [x] **DB schema applied:** `profiles` table + `user_role` enum created on `cxwrvstojafdjqvelbno` (migration `0001_auth_users.sql`)
+- [x] **DB trigger:** auto-create `profiles` row on new auth signup (`handle_new_user`)
+- [x] **RLS policies:** users read/update own profile; admins read all
+- [x] **Secure functions:** revoked public/anon/authenticated EXECUTE on trigger functions; fixed search_path
+- [x] **`use-auth.ts` re-wired** to Supabase Auth + `profiles` table (returns real user, role, reactive to auth changes)
+- [x] **`middleware.ts`** added — refreshes session, protects `/profile` `/book-listener` `/payment` `/chat-queue` `/session`, redirects signed-in users off auth pages
+- [x] **Sonner Toaster** added to root layout
+- [x] **Login form** wired to `signInWithPassword` + role-based redirect + validation + toasts
+- [x] **Register form** wired to `signUp` + profile upsert + redirect to `/profile/setup`
+- [x] **Logout button** (desktop + mobile) wired to `signOut`
+- [x] **Forgot-password form** wired to `resetPasswordForEmail` with redirect to `/reset-password`
+- [x] **Reset-password form** wired to `exchangeCodeForSession` + `updateUser` (handles `token` and `code`)
 - [ ] Email verification (`verify-email`) via Supabase auth
-- [ ] Update `hooks/use-auth.ts` to return real user + role
-- [ ] DB trigger or RLS to create a `profiles` row on new signup
-- [ ] RLS policies: users can read/update only their own profile; admins read all
+- [ ] Admin/super-admin role-gated route protection (middleware reads role)
 - [ ] Verify all role-based nav links render correctly in navbar
 
 ### Questions
-- (none yet)
+- ✅ **Resolved:** MCP reconnected to `cxwrvstojafdjqvelbno` (was on `zlqairttoyxbxwccwrhb`). Migration tooling now works directly.
+- ✅ **Resolved:** Service role key added to `.env.local` (local only, never committed).
+- ✅ **Resolved:** Advisor warnings for `handle_new_user`/`handle_updated_at` fixed. `rls_auto_enable` warning is a Supabase-internal helper — safe to ignore.
+- ✅ **Resolved:** Client forms using `useSearchParams` caused build-time prerender error — fixed by wrapping in `<Suspense>`.
+- ❓ **Pending:** Email verification is currently disabled by default in Supabase (signUp creates a session immediately). Decide whether to require email confirmation for consumer signups.
+- ❓ **Pending:** Google/Apple OAuth buttons are still static (non-functional). Decide whether to configure Supabase OAuth providers.
 
 ---
 

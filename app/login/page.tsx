@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { Suspense } from "react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata: Metadata = {
   title: "Log In | Our Ears Are Open",
@@ -71,46 +70,11 @@ export default function LoginPage() {
                 </p>
               </CardHeader>
               <CardContent>
-                <form className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      required
-                    />
-                  </div>
+                <Suspense fallback={null}>
+                  <LoginForm />
+                </Suspense>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Password</Label>
-                      <Link
-                        href="/forgot-password"
-                        className="text-sm text-primary hover:underline"
-                      >
-                        Forgot password?
-                      </Link>
-                    </div>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="Enter your password"
-                      required
-                    />
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="remember" />
-                    <Label htmlFor="remember" className="text-sm font-normal">
-                      Remember me for 30 days
-                    </Label>
-                  </div>
-
-                  <Button type="submit" className="w-full" size="lg">
-                    Log In
-                  </Button>
-
+                <div className="mt-4">
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">
                       <span className="w-full border-t border-border" />
@@ -122,7 +86,7 @@ export default function LoginPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="mt-4 grid grid-cols-2 gap-4">
                     <Button variant="outline" type="button">
                       Google
                     </Button>
@@ -131,7 +95,7 @@ export default function LoginPage() {
                     </Button>
                   </div>
 
-                  <p className="text-center text-sm text-muted-foreground">
+                  <p className="mt-6 text-center text-sm text-muted-foreground">
                     Do not have an account?{" "}
                     <Link
                       href="/register"
@@ -140,7 +104,7 @@ export default function LoginPage() {
                       Sign up
                     </Link>
                   </p>
-                </form>
+                </div>
               </CardContent>
             </Card>
           </div>
