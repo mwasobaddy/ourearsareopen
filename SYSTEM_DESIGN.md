@@ -51,7 +51,8 @@ Handles registration, login, session persistence, password reset, email verifica
 - [x] **Logout button** (desktop + mobile) wired to `signOut`
 - [x] **Forgot-password form** wired to `resetPasswordForEmail` with redirect to `/reset-password`
 - [x] **Reset-password form** wired to `exchangeCodeForSession` + `updateUser` (handles `token` and `code`)
-- [ ] Email verification (`verify-email`) via Supabase auth
+- [x] **Email-verification flow** handled in register form (detects `identities.length === 0`, shows "check your email" screen instead of redirecting to profile)
+- [ ] Google/Apple OAuth wiring (awaiting client credentials — buttons left static)
 - [ ] Admin/super-admin role-gated route protection (middleware reads role)
 - [ ] Verify all role-based nav links render correctly in navbar
 
@@ -60,8 +61,10 @@ Handles registration, login, session persistence, password reset, email verifica
 - ✅ **Resolved:** Service role key added to `.env.local` (local only, never committed).
 - ✅ **Resolved:** Advisor warnings for `handle_new_user`/`handle_updated_at` fixed. `rls_auto_enable` warning is a Supabase-internal helper — safe to ignore.
 - ✅ **Resolved:** Client forms using `useSearchParams` caused build-time prerender error — fixed by wrapping in `<Suspense>`.
-- ❓ **Pending:** Email verification is currently disabled by default in Supabase (signUp creates a session immediately). Decide whether to require email confirmation for consumer signups.
-- ❓ **Pending:** Google/Apple OAuth buttons are still static (non-functional). Decide whether to configure Supabase OAuth providers.
+- ❓ **CLIENT ACTION REQUIRED (email verification):** To *enforce* email confirmation, the client must toggle **"Confirm email" ON** in Supabase Dashboard → Authentication → Providers → Email. The frontend already handles the required-verification flow; only the dashboard toggle gates actual enforcement.
+- ❓ **CLIENT ACTION REQUIRED (email provider):** Sending verification/reset emails requires a Resend account + verified domain + API key. See the client message (left with user).
+- ❓ **CLIENT ACTION REQUIRED (OAuth):** Google OAuth (Client ID/Secret) + Apple credentials needed to wire the login/register OAuth buttons. Buttons left static for now.
+- ❓ **Pending:** Role-gated route protection for listener/admin/super-admin portals (middleware currently only checks authentication, not role).
 
 ---
 

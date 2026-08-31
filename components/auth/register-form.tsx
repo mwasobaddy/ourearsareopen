@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,6 +51,8 @@ export function RegisterForm() {
   const returnUrl = searchParams.get("returnUrl");
   const supabase = createClient();
   const [loading, setLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const {
     register,
@@ -118,9 +121,40 @@ export function RegisterForm() {
       services_consent: values.consent,
     });
 
+    // When email confirmation is enabled, no session is created until the
+    // user verifies their email (data.session is null / no identities yet).
+    const needsEmailConfirmation = !data.session && data.user.identities?.length === 0;
+
+    if (needsEmailConfirmation) {
+      setRegisteredEmail(values.email);
+      setNeedsVerification(true);
+      setLoading(false);
+      return;
+    }
+
     toast.success("Account created! Let's finish your profile.");
     router.push(returnUrl ? `/profile/setup?next=${encodeURIComponent(returnUrl)}` : "/profile/setup");
     router.refresh();
+  }
+
+  if (needsVerification) {
+    return (
+      <div className="space-y-4 rounded-lg border border-border bg-muted/40 p-5 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <Mail className="h-6 w-6 text-primary" />
+        </div>
+        <h3 className="text-lg font-semibold">Check your email</h3>
+        <p className="text-sm text-muted-foreground">
+          We sent a verification link to{" "}
+          <span className="font-medium text-foreground">{registeredEmail}</span>.
+          Click the link in the email to verify your account, then you can
+          complete your profile and book a conversation.
+        </p>
+        <Button variant="outline" className="mt-2" asChild>
+          <a href="/login">Back to Login</a>
+        </Button>
+      </div>
+    );
   }
 
   return (
