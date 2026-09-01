@@ -1,8 +1,7 @@
-"use server";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
 
-import { createClient } from "@supabase/supabase-js";
-
-let adminClient: ReturnType<typeof createClient> | null = null;
+let adminClient: SupabaseClient<Database> | null = null;
 
 /**
  * Service-role client — bypasses RLS.
@@ -10,7 +9,7 @@ let adminClient: ReturnType<typeof createClient> | null = null;
  */
 export function createAdminClient() {
   if (!adminClient) {
-    adminClient = createClient(
+    adminClient = createClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { auth: { autoRefreshToken: false, persistSession: false } },

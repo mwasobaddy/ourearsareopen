@@ -5,17 +5,13 @@ import {
   Heart,
   Phone,
   CheckCircle,
-  CreditCard,
-  Shield,
   MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
+import DonationClient from "@/components/payments/donation-client";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -102,137 +98,15 @@ export default function DonatePage() {
                       </TabsContent>
                       <TabsContent value="monthly" className="mt-4">
                         <p className="text-sm text-muted-foreground">
-                          Become a sustaining donor with a monthly gift. Every
-                          month you give $25 or more to support our mission.
-                          Care for any time — cancel anytime.
+                          Recurring monthly giving is coming soon — for now,
+                          please make a one-time donation using the form below.
                         </p>
                       </TabsContent>
                     </Tabs>
 
                     <Separator />
 
-                    <div className="space-y-4">
-                      <Label>Select Amount</Label>
-                      <RadioGroup
-                        defaultValue="100"
-                        className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-                      >
-                        {suggestedAmounts.map((amount) => (
-                          <div key={amount.value}>
-                            <RadioGroupItem
-                              value={amount.value}
-                              id={`amount-${amount.value}`}
-                              className="peer sr-only"
-                            />
-                            <Label
-                              htmlFor={`amount-${amount.value}`}
-                              className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-border bg-background p-4 transition-all peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 hover:bg-secondary"
-                            >
-                              <span className="text-lg font-bold text-foreground">
-                                {amount.label}
-                              </span>
-                            </Label>
-                          </div>
-                        ))}
-                      </RadioGroup>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="customAmount">
-                        Or enter a custom amount
-                      </Label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                          $
-                        </span>
-                        <Input
-                          id="customAmount"
-                          type="number"
-                          placeholder="Other amount"
-                          className="pl-7"
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <h3 className="font-semibold text-foreground">
-                        Your Information
-                      </h3>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="donorFirstName">First Name</Label>
-                          <Input
-                            id="donorFirstName"
-                            placeholder="First name"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="donorLastName">Last Name</Label>
-                          <Input
-                            id="donorLastName"
-                            placeholder="Last name"
-                            required
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="donorEmail">Email</Label>
-                        <Input
-                          id="donorEmail"
-                          type="email"
-                          placeholder="you@example.com"
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <h3 className="flex items-center gap-2 font-semibold text-foreground">
-                        <CreditCard className="h-5 w-5" />
-                        Payment Details
-                      </h3>
-                      <div className="space-y-2">
-                        <Label htmlFor="donorCardNumber">Card Number</Label>
-                        <Input
-                          id="donorCardNumber"
-                          placeholder="1234 5678 9012 3456"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="donorExpiry">Expiry Date</Label>
-                          <Input
-                            id="donorExpiry"
-                            placeholder="MM / YY"
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="donorCvc">CVC</Label>
-                          <Input
-                            id="donorCvc"
-                            placeholder="123"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <Button className="w-full" size="lg">
-                      <Heart className="mr-2 h-5 w-5" />
-                      Complete Donation
-                    </Button>
-
-                    <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                      <Shield className="h-4 w-4" />
-                      <span>Secure, encrypted donation</span>
-                    </div>
+                    <DonationClient />
                   </CardContent>
                 </Card>
               </div>

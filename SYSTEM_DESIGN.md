@@ -200,34 +200,35 @@ select id, user_id, type, status, slot_start from public.bookings;
 
 ## Module 4: Payments (Stripe)
 
-**Status:** ⚪
+**Status:** 🟡 (backend + UI wired; blocked on live testing until Stripe keys)
 
 All money movement: booking payment, one-off donations, chat-queue minimum payment, saved payment methods, and Stripe webhooks. This uses **Next.js API routes** (server-only, holds Stripe secret key).
 
 ### TO-DO
-- [ ] Install `stripe` SDK
-- [ ] Create `app/api/stripe/payment-intent/route.ts` (create PaymentIntent for booking/donation/queue)
-- [ ] Create `app/api/stripe/payment-methods/route.ts` (list/add/remove saved methods)
-- [ ] Create `app/api/webhooks/stripe/route.ts` (verify signature, handle `payment_intent.succeeded`, `failed`; idempotency)
-- [ ] Create `payments` table (stripe_payment_intent_id, user_id, amount_cents, type, ref_id, status)
-- [ ] Wire `/payment` page to create + confirm a real PaymentIntent
-- [ ] Wire `/donate` page for one-off donations
-- [ ] Mark booking confirmed only on successful webhook (not on client success)
-- [ ] Admin-initiated refunds
-- [ ] Email receipts on payment
-- [ ] Webhook security: verify Stripe signature, never trust client
+- [x] Install `stripe` SDK (`stripe@22`), `@stripe/stripe-js`, `@stripe/react-stripe-js`
+- [x] Create `app/api/stripe/payment-intent/route.ts` (create PaymentIntent for booking/donation)
+- [ ] Create `app/api/stripe/payment-methods/route.ts` (list/add/remove saved methods) — **deferred**
+- [x] Create `app/api/webhooks/stripe/route.ts` (verify signature, `payment_intent.succeeded` / `payment_failed` / `canceled`; idempotent; confirms paid bookings)
+- [x] Create `payments` table (stripe_payment_intent_id, user_id, amount_cents, type, bookings_id, status, receipt_url) — migration `0007_payments.sql`
+- [x] Wire `/payment?booking=<id>` page to create + confirm a real PaymentIntent (Stripe Elements)
+- [x] Wire `/donate` page for one-time donations (recurring/monthly deferred)
+- [x] Mark booking confirmed only on successful webhook (not on client success)
+- [ ] Admin-initiated refunds — **deferred**
+- [ ] Email receipts on payment — **deferred (needs Resend)**
+- [x] Webhook security: verify Stripe signature, never trust client
+- [x] Typed Supabase clients via `lib/supabase/database.types.ts` (Database generic on client/server/admin)
 
 ### Questions
-- (none yet)
+- Recurring donations: use Stripe Checkout/Subscriptions + customer portal (deferred to a later pass).
 
 ### How to test — Module 4
-Fill in as Module 4 is built (Stripe). Expected checklist:
-1. With real Stripe test keys, book a session → `/payment` creates a PaymentIntent and the card form completes a test payment (`4242 4242 4242 4242`).
-2. A `payments` row is created; the booking is only marked confirmed **after** the Stripe webhook succeeds, not on the client.
-3. Webhook signature is verified — forging/replaying fails.
-4. Donate flow creates a one-off PaymentIntent + successful `payments` row.
-5. Saved payment methods can be added/list/removed.
-6. Refund initiated by admin updates the Stripe charge + local status.
+Code is complete and `pnpm build` passes, but end-to-end payment requires **real Stripe keys** (test + live) — apply them in `.env.local` and restart. Env keys: `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`.
+1. Configure Stripe webhook to point at `POST /api/webhooks/stripe` (encrypted/written events: `payment_intent.succeeded`, `payment_intent.payment_failed`, `payment_intent.canceled`) and put the signing secret in `STRIPE_WEBHOOK_SECRET`.
+2. With test keys: book a session → `/payment?booking=<id>` loads Stripe Elements, shows `$10.99`, and a test card (`4242 4242 4242 4242`) completes the payment and redirects to `/payment/success`.
+3. A `payments` row is created (`requires_payment_method` → `succeeded`); the booking is only marked `confirmed` **after** the webhook fires, not on the client.
+4. Webhook signature is verified — forging/replaying the request fails with 400.
+5. `/donate`: pick an amount → a donation PaymentIntent is created → test-card payment succeeds → `/donate/success`.
+6. Canceling the PaymentIntent on the Stripe dashboard reflects `canceled` via the webhook.
 7. *Blocked until the client provides Stripe keys (test + live).*
 
 ---

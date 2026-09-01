@@ -43,7 +43,7 @@ export type ProfileData = {
   prior_therapy: string | null;
   reason: string | null;
   assigned_listener_id: string | null;
-  profile_complete: boolean;
+  profile_complete: boolean | null;
   created_at: string | null;
 };
 

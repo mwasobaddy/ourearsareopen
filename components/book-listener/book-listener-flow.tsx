@@ -174,7 +174,7 @@ export function BookListenerFlow() {
           </p>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row">
             <Button size="lg" asChild>
-              <Link href="/payment">
+              <Link href={`/payment?booking=${createdBookingId}`}>
                 Continue to Payment
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
