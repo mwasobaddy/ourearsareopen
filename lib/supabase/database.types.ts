@@ -220,6 +220,7 @@ export type Database = {
         Row: {
           age_range: string | null
           assigned_listener_id: string | null
+          availability: Json
           avatar_url: string | null
           country: string | null
           created_at: string
@@ -244,6 +245,7 @@ export type Database = {
         Insert: {
           age_range?: string | null
           assigned_listener_id?: string | null
+          availability?: Json
           avatar_url?: string | null
           country?: string | null
           created_at?: string
@@ -268,6 +270,7 @@ export type Database = {
         Update: {
           age_range?: string | null
           assigned_listener_id?: string | null
+          availability?: Json
           avatar_url?: string | null
           country?: string | null
           created_at?: string

@@ -296,37 +296,39 @@ In-session chat (real-time text) and voice calls (phone appointments). Voice via
 
 ## Module 7: Listener Dashboard & Availability
 
-**Status:** ⚪
+**Status:** 🟡 (core portal made real: queue toggle/pool/accept, availability, hours, consumer profile; remaining items build on Twilio + admin listener-provisioning)
 
-The `/team-member` / workforce portal. Listener login (admin-created username + first-login password), availability, queue toggle, consumer profiles, hours tracking (15hr/week cap).
+The `/team-member` / workforce portal. Listener login (admin-created username + first-login password), availability, queue toggle, consumer profiles, hours tracking (15hr/week cap). Listeners are modeled as `profiles.role = 'listener'` (existing `is_listener()` helper) rather than a separate table.
 
 ### TO-DO
+- [x] Migration `0012_listener_availability.sql` — `profiles.availability` (weekly schedule JSONB)
+- [x] `GET/PUT /api/availability` — listener loads/saves weekly schedule
+- [x] `GET /api/queue/pool` — listener-only waiting pool with (name, reason) via admin client (keeps profiles RLS intact)
+- [x] `POST /api/queue/accept` — listener accepts a specific waiting consumer → assigned, pool FIFO bumps
+- [x] `GET /api/queue/toggle` — read current queue-availability state
+- [x] `GET /api/queue/customer/[id]` — listener views a consumer's profile/signup answers before a session (gated to consumers in the listener's care; email/phone withheld)
+- [x] `/team-member/queue` real — availability toggle + real waiting pool + Accept (opens `/session/<entry>?origin=queue`) + consumer profile dialog
+- [x] `/team-member/availability` real — load/save weekly schedule
+- [x] `/team-member/dashboard` real — weekly/monthly hours computed from `sessions` (ended_at − started_at), 15hr cap progress, today's confirmed appointments with Open Chat/Start Call
 - [ ] Listener accounts: admin creates username; listener sets password on first login
 - [ ] Listener-only login + redirect to team portal
-- [ ] `listeners` table (user_id, username, availability, queue_available, hours_this_week)
-- [ ] Set availability schedule for scheduled bookings
-- [ ] Queue availability toggle (if no appointments, join chat queue)
-- [ ] View consumer profile + signup answers before session
-- [ ] Start voice/chat session from dashboard
 - [ ] Safety disconnect button (with reason)
-- [ ] Hours tracking: weekly/monthly calls + chats; enforce 15hr/week (1099 cap)
+- [ ] Enforce 15hr/week cap (block further sessions) — tracking done, enforcement pending
 - [ ] 14-minute warning before auto-end; extend by 5–10 min
 - [ ] No auto-pop next session; debrief time required
 - [ ] In-session follow-up booking; if paid → email payment link to consumer (listener never sees payment)
+- [ ] Start **voice** session from dashboard — 🔴 blocked (Twilio)
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 7
-Fill in as Module 7 is built. Expected checklist:
-1. Admin creates a listener account (username). Listener logs in with the temp password and is forced to set a real one on first login.
-2. Listener is redirected to `/team-member` portal (not the consumer app).
-3. Listener sets availability schedule + queue toggle; a `listeners` row reflects it.
-4. Listener views the assigned consumer's profile + signup answers before a session.
-5. Voice/chat session starts from the dashboard.
-6. Safety disconnect button records a reason.
-7. Weekly hours tracked; 14-min warning + auto-end at 15; manual extension works; a 15hr/week cap blocks further sessions.
-8. Follow-up booking with a paid consumer sends a payment link to the consumer's email (listener never sees payment).
+1. A listener opens `/team-member/queue`: toggling "Available for queue" persists (GET/POST `/api/queue/toggle`) and, when a customer waits, auto-assigns the earliest one; the pool shows real waiting consumers with name/reason.
+2. Accepting a consumer assigns the queue entry to the listener, decrements everyone behind, and opens `/session/<entry>?origin=queue` (realtime chat).
+3. The consumer profile dialog shows age range, pronouns, country, reason, prior therapy, relationship status, consent.
+4. `/team-member/availability` loads and saves the weekly schedule to `profiles.availability`.
+5. `/team-member/dashboard` shows weekly/monthly hours computed from the listener's completed sessions, the 15 hr/week capacity bar, and today's confirmed appointments with Open Chat/Start Call.
+6. Remaining items (listener provisioning via username+first-login password, safety-disconnect with reason, hard 15hr enforcement, 14-min warning/extension, follow-up booking payment link, voice) are pending; voice additionally needs Twilio creds.
 
 ---
 
@@ -510,7 +512,6 @@ This section captures decisions that span multiple modules. Revisit as you build
 
 > ℹ️ **Note on PayPal:** The platform accepts PayPal **through Stripe** (`paypal` become a Stripe payment method). No separate PayPal developer account/API keys are needed. If the client wants standalone PayPal buttons (old design), that is a separate integration — flag it.
 
-### Module 5 — Open Chat Queue (not yet reached)
 ### Module 5 — Open Chat Queue
 The queue join payment **reuses the same Stripe account** as Modules 1/4 (no new provider). The $1 minimum charge flows through the same Stripe PaymentIntent → dashboard → webhooks. Once the client enables **Module 4 Stripe keys + webhook endpoint + payment methods**, queue payments work automatically. — ⬜ (reuses Stripe above)
 
@@ -522,6 +523,11 @@ The queue join payment **reuses the same Stripe account** as Modules 1/4 (no new
 | 1 | **Twilio account + credentials** (Account SID + Auth Token) | Voice calls for the conversation/session layer | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | ⬜ |
 | 2 | **Twilio phone number(s) + verified caller ID** | Place/receive calls for listeners/sessions | Twilio console; `TWILIO_PHONE_NUMBER` | ⬜ |
 | 3 | **Twilio (or LiveKit) — decide voice provider** | Voice calls; realtime text chat uses Supabase Realtime | SweetJS confirmation in Cross-Module notes | ⬜ |
+
+### Module 7 — Listener Dashboard & Availability
+Core portal is REAL (**queue toggle/pool/accept**, weekly availability, dashboard hours, consumer-profile view) — no client action needed. Remaining listener items depend on **Supabase Auth** (below) + Twilio:
+- Listener provisioning (admin creates username + first-login password) needs **Supabase email/SMS password auth enabled** — ⬜ (scale & extensions, see Module 1)
+- **Voice** sessions from the dashboard — ⬜ (Twilio above)
 
 ### Module 8 — Session & Call Management
 - (reminders / emails reuse Resend + Twilio above; SMS reminders need a Twilio SMS-capable number) — ⬜ / 🟡

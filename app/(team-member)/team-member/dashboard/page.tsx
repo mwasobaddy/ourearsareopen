@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import {
   Clock,
   Phone,
@@ -6,33 +7,110 @@ import {
   Calendar,
   AlertCircle,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Dashboard | Team Member Portal",
   description: "Your team member dashboard with hours, calls, and chats.",
 };
 
-// Mock data - replace with API calls
-const stats = {
-  hoursThisWeek: 8.5,
-  hoursThisMonth: 32,
-  hoursCap: 15,
-  callsThisWeek: 12,
-  chatsThisWeek: 18,
-};
+const HOURS_CAP = 15;
 
-const todayAppointments = [
-  { id: "1", consumer: "Alex M.", type: "Phone", time: "2:00 PM", status: "upcoming" },
-  { id: "2", consumer: "Jordan D.", type: "Chat", time: "4:30 PM", status: "upcoming" },
-];
+function getStartOfWeek(d: Date): Date {
+  const copy = new Date(d);
+  const day = copy.getDay();
+  const diff = (day === 0 ? -6 : 1) - day; // Monday start
+  copy.setDate(copy.getDate() + diff);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
 
-export default function TeamMemberDashboardPage() {
-  const hoursPercent = Math.min(100, (stats.hoursThisWeek / stats.hoursCap) * 100);
+function getStartOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function hoursBetween(start: string, end: string): number {
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  return Math.max(0, ms) / 3_600_000;
+}
+
+export default async function TeamMemberDashboardPage() {
+  const userClient = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await userClient.auth.getUser();
+
+  if (userError || !user) {
+    redirect("/login");
+  }
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile || profile.role !== "listener") {
+    redirect("/");
+  }
+
+  const now = new Date();
+  const weekStart = getStartOfWeek(now).toISOString();
+  const monthStart = getStartOfMonth(now).toISOString();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+
+  const { data: sessions } = await admin
+    .from("sessions")
+    .select("id, mode, status, started_at, ended_at")
+    .eq("listener_id", user.id);
+
+  const done = (sessions ?? []).filter(
+    (s) => s.status === "ended" || s.status === "completed",
+  );
+
+  let hoursThisWeek = 0;
+  let hoursThisMonth = 0;
+  let callsThisWeek = 0;
+  let chatsThisWeek = 0;
+
+  for (const s of done) {
+    if (!s.started_at || !s.ended_at) continue;
+    const h = hoursBetween(s.started_at, s.ended_at);
+    if (s.started_at >= weekStart) {
+      hoursThisWeek += h;
+      if (s.mode === "phone") callsThisWeek += 1;
+      else chatsThisWeek += 1;
+    }
+    if (s.started_at >= monthStart) hoursThisMonth += h;
+  }
+
+  hoursThisWeek = Math.round(hoursThisWeek * 100) / 100;
+  hoursThisMonth = Math.round(hoursThisMonth * 100) / 100;
+
+  // Today's confirmed scheduled appointments for this listener.
+  const { data: todayBookings } = await admin
+    .from("bookings")
+    .select("id, type, slot_start, slot_end, user_id")
+    .eq("listener_id", user.id)
+    .eq("status", "confirmed")
+    .gte("slot_start", dayStart)
+    .lt("slot_start", dayEnd);
+
+  const hoursPercent = Math.min(100, (hoursThisWeek / HOURS_CAP) * 100);
 
   return (
     <div className="space-y-8">
@@ -43,51 +121,48 @@ export default function TeamMemberDashboardPage() {
         </p>
       </div>
 
-      {/* Stats */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Hours This Week"
-          value={`${stats.hoursThisWeek} / ${stats.hoursCap}`}
+          value={`${hoursThisWeek} / ${HOURS_CAP}`}
           description="15 hr/week cap (1099)"
           icon="Clock"
         />
         <StatsCard
           title="Hours This Month"
-          value={stats.hoursThisMonth}
+          value={hoursThisMonth}
           description="Total hours"
           icon="Clock"
         />
         <StatsCard
           title="Calls This Week"
-          value={stats.callsThisWeek}
+          value={callsThisWeek}
           description="Phone sessions"
           icon="Phone"
         />
         <StatsCard
           title="Chats This Week"
-          value={stats.chatsThisWeek}
+          value={chatsThisWeek}
           description="Chat sessions"
           icon="MessageSquare"
         />
       </div>
 
-      {/* Hours progress */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-primary" />
-            Weekly Hours (15 hr cap)
+            Weekly Hours ({HOURS_CAP} hr cap)
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Progress value={hoursPercent} className="h-2" />
           <p className="mt-2 text-sm text-muted-foreground">
-            {stats.hoursThisWeek} of {stats.hoursCap} hours used this week
+            {hoursThisWeek} of {HOURS_CAP} hours used this week
           </p>
         </CardContent>
       </Card>
 
-      {/* Today's appointments */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
@@ -101,33 +176,38 @@ export default function TeamMemberDashboardPage() {
           </Link>
         </CardHeader>
         <CardContent>
-          {todayAppointments.length > 0 ? (
+          {todayBookings && todayBookings.length > 0 ? (
             <ul className="space-y-4">
-              {todayAppointments.map((apt) => (
+              {todayBookings.map((b) => (
                 <li
-                  key={apt.id}
-                  className="flex items-center justify-between rounded-lg border border-border p-4"
+                  key={b.id}
+                  className="flex flex-col gap-2 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <p className="font-medium">{apt.consumer}</p>
+                    <p className="font-medium capitalize">
+                      {b.type === "phone" ? "Phone" : "Chat"} appointment
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      {apt.type} at {apt.time}
+                      {b.slot_start
+                        ? new Date(b.slot_start).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "Time to be confirmed"}
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" asChild>
-                      <Link href={`/session/${apt.id}`}>
-                        {apt.type === "Phone" ? "Start Call" : "Open Chat"}
-                      </Link>
-                    </Button>
-                  </div>
+                  <Button size="sm" asChild>
+                    <Link href={`/session/${b.id}?origin=booking`}>
+                      {b.type === "phone" ? "Start Call" : "Open Chat"}
+                    </Link>
+                  </Button>
                 </li>
               ))}
             </ul>
           ) : (
             <div className="py-8 text-center text-muted-foreground">
               <Calendar className="mx-auto mb-2 h-12 w-12 opacity-50" />
-              <p>No appointments today</p>
+              <p>No scheduled appointments today</p>
               <Link href="/team-member/queue">
                 <Button className="mt-4">Join Chat Queue</Button>
               </Link>
