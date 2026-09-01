@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   User,
@@ -14,6 +14,8 @@ import {
   Loader2,
   Edit,
   ChevronRight,
+  Clock,
+  MessageSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -45,12 +47,61 @@ export type ProfileData = {
   created_at: string | null;
 };
 
+export type Booking = {
+  id: string;
+  type: "phone" | "chat";
+  payment_option: string;
+  concern: string | null;
+  slot_start: string | null;
+  status: string;
+  updated_at: string | null;
+};
+
 export function ProfileView({ profile }: { profile: ProfileData }) {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatar, setAvatar] = useState(profile.avatar_url);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function loadBookings() {
+      const { data, error } = await supabase
+        .from("bookings")
+        .select("id, type, payment_option, concern, slot_start, status, updated_at")
+        .eq("user_id", profile.id)
+        .order("slot_start", { ascending: false });
+      if (!error && active) {
+        setBookings((data as Booking[]) ?? []);
+      }
+      if (active) setLoadingBookings(false);
+    }
+    loadBookings();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
+
+  async function handleCancelBooking(id: string) {
+    if (!window.confirm("Cancel this booking?")) return;
+    const { error } = await supabase
+      .from("bookings")
+      .update({ status: "cancelled" })
+      .eq("id", id)
+      .eq("user_id", profile.id);
+    if (error) {
+      toast.error("Couldn't cancel the booking.");
+      return;
+    }
+    setBookings((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, status: "cancelled" } : b)),
+    );
+    toast.success("Booking cancelled");
+  }
 
   const memberSince = profile.created_at
     ? new Date(profile.created_at).toLocaleDateString("en-US", {
@@ -218,17 +269,76 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
         </TabsList>
 
         <TabsContent value="conversations" className="mt-6">
-          <Card className="border-border text-center">
-            <CardContent className="py-10">
-              <Calendar className="mx-auto h-12 w-12 text-muted-foreground/50" />
-              <p className="mt-3 text-muted-foreground">
-                No conversations yet. Book your first one to get started.
-              </p>
-              <Button className="mt-4" asChild>
-                <Link href="/book-listener">Book a Listener</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          {loadingBookings ? (
+            <Card className="border-border text-center">
+              <CardContent className="py-10">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground/50" />
+              </CardContent>
+            </Card>
+          ) : bookings.length === 0 ? (
+            <Card className="border-border text-center">
+              <CardContent className="py-10">
+                <Calendar className="mx-auto h-12 w-12 text-muted-foreground/50" />
+                <p className="mt-3 text-muted-foreground">
+                  No conversations yet. Book your first one to get started.
+                </p>
+                <Button className="mt-4" asChild>
+                  <Link href="/book-listener">Book a Listener</Link>
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-6 lg:grid-cols-2">
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5 text-primary" />
+                    Upcoming
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {upcomingBookings(bookings).length === 0 ? (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      No upcoming conversations.
+                    </p>
+                  ) : (
+                    <div className="space-y-4">
+                      {upcomingBookings(bookings).map((b) => (
+                        <BookingRow key={b.id} booking={b} onCancel={handleCancelBooking} />
+                      ))}
+                      <Link href="/book-listener">
+                        <Button variant="outline" className="w-full bg-transparent">
+                          Book a New Listener
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="border-border">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-primary" />
+                    History
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {pastBookings(bookings).length === 0 ? (
+                    <p className="py-6 text-center text-sm text-muted-foreground">
+                      No past conversations yet.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {pastBookings(bookings).map((b) => (
+                        <BookingRow key={b.id} booking={b} />
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
@@ -412,6 +522,74 @@ function InfoField({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-sm text-muted-foreground">{label}</p>
       <p className="font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+const UPCOMING_STATUSES = ["pending", "confirmed"];
+
+function upcomingBookings(bookings: Booking[]) {
+  return bookings.filter((b) => UPCOMING_STATUSES.includes(b.status));
+}
+
+function pastBookings(bookings: Booking[]) {
+  return bookings.filter((b) => !UPCOMING_STATUSES.includes(b.status));
+}
+
+function BookingRow({
+  booking,
+  onCancel,
+}: {
+  booking: Booking;
+  onCancel?: (id: string) => void;
+}) {
+  const dateStr = booking.slot_start
+    ? new Date(booking.slot_start).toLocaleString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : "Date TBD";
+
+  const statusLabel = booking.status.charAt(0).toUpperCase() + booking.status.slice(1);
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-medium capitalize text-foreground">
+            {booking.type} conversation
+          </p>
+          <Badge variant={booking.status === "cancelled" ? "outline" : "secondary"}>
+            {statusLabel}
+          </Badge>
+        </div>
+        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          {booking.type === "phone" ? (
+            <Clock className="h-3 w-3" />
+          ) : (
+            <MessageSquare className="h-3 w-3" />
+          )}
+          <span>{dateStr}</span>
+        </div>
+        {booking.payment_option === "free" ? (
+          <span className="mt-1 inline-block text-xs text-muted-foreground">
+            Free conversation
+          </span>
+        ) : null}
+      </div>
+      {onCancel && (booking.status === "pending" || booking.status === "confirmed") ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onCancel(booking.id)}
+          className="shrink-0 text-destructive hover:text-destructive"
+        >
+          Cancel
+        </Button>
+      ) : null}
     </div>
   );
 }

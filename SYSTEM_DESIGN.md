@@ -150,32 +150,51 @@ In Supabase Dashboard → Storage → `avatars`, confirm a file exists at `<your
 
 ## Module 3: Booking (Scheduled Sessions)
 
-**Status:** ⚪
+**Status:** 🟡
 
 The book-listener multi-step flow: choose phone/chat type, concern, listener preferences, date/time, then payment. Creates a booking that persists in the DB.
 
 ### TO-DO
-- [ ] Create `bookings` table (user_id, listener_id, type, concern, preferences, slot, status, payment_intent_id)
-- [ ] Availability: create `availability_slots` table + API to fetch slots by date/type
-- [ ] Wire `/book-listener` 5-step form to create a real booking
-- [ ] Booking hold (brief time-lock while user pays)
-- [ ] List upcoming + past bookings on `/profile`
-- [ ] Cancel booking (with policy)
-- [ ] Reschedule booking
-- [ ] RLS: customers own their bookings; listeners see assigned; admins see all
-- [ ] Booking confirmations via email (Resend or Supabase Edge Function)
+- [x] `bookings` table (user_id, listener_id, type, concern, preferences jsonb, slot_start/end, status pending/confirmed/completed/cancelled/no_show, payment_intent_id) + RLS (migration `0006`)
+- [x] `availability_slots` table (listener_id, starts_at, ends_at, is_booked, booking_id) + RLS (migration `0006`)
+- [x] RLS: customers own their bookings; listeners see assigned; admins see all (via `is_admin()`)
+- [x] `/book-listener` converted to `BookListenerFlow` client component — collects type, payment option (paid/free), concern (5-word min), listener preferences, date + time, and creates a real `bookings` row on "Confirm Booking"
+- [x] Booking page server-guarded: incomplete profile → redirect to `/profile/setup?next=/book-listener`
+- [x] List upcoming + past bookings on `/profile` Conversations tab (real data) with Cancel action
+- [x] End-to-end verified: create booking → list → cancel → RLS isolation → availability slots (via confirmed test user; cleaned up)
+- [ ] Booking hold / time-lock while paying (needs payment timing from Module 4)
+- [ ] Reschedule booking UI
+- [ ] Booking confirmations via email *(Blocked until Resend configured)*
 
 ### Questions
-- (none yet)
+- ✅ **Resolved:** Payment stays out of scope for Module 3 — `bookings` created with `status = pending`, `payment_intent_id` left null; Module 4 (Stripe) flips to `confirmed` on webhook.
+- ✅ **Resolved:** Booking page guard behavior — unauthenticated users are sent to `/login` by middleware; authenticated-but-incomplete profiles are sent to `/profile/setup` (soft prompt still shown to logged-out visitors).
 
 ### How to test — Module 3
-Fill in as Module 3 is built. Expected checklist:
-1. With a profile-complete consumer, visit `/book-listener`. Each of the 5 steps saves and can be revisited (Back/Continue).
-2. On submit, a `bookings` row is created with the correct `user_id`, `type`, `concern`, `preferences`, `slot`, and `status` (e.g. `pending`/`confirmed`).
-3. `/profile` → Conversations tab lists the new booking under Upcoming.
-4. Cancelling / rescheduling updates the row and frees the slot.
-5. RLS: another user cannot read/modify your booking; a listener sees only assigned bookings; admin sees all.
-6. Email confirmation on booking *(Blocked until Resend configured).*
+Log in as a profile-complete consumer (create one, complete `/profile/setup` first, or set `profile_complete = true` in the DB).
+
+**Creating a booking**
+1. Visit `/book-listener`. Pick a conversation type (Phone/Chat) and Paid or Free. Select a date and a time slot. Type at least 5 words in "what's on your mind".
+2. Click **Confirm Booking** → a success screen appears with "Continue to Payment" + "Go to Profile".
+3. In Supabase Dashboard → Table Editor → `bookings`, confirm a row exists with your `user_id`, the chosen `type`, `payment_option`, `concern`, `preferences` (JSON), `slot_start`/`slot_end` (15 min apart), and `status = pending`.
+
+**Validation**
+4. Try to confirm with fewer than 5 words → blocked. Try without a date or time → blocked. If logged out, you see the Sign up / Log in step instead of Confirm.
+
+**Viewing + cancelling on profile**
+5. Go to `/profile` → Conversations tab → your booking appears under **Upcoming** with its type and time.
+6. Click **Cancel** → status flips to `cancelled` in the DB and it moves to **History**.
+
+**RLS isolation (developer)**
+7. As a second user, confirm you cannot see or modify the first user's bookings.
+```sql
+select id, user_id, type, status, slot_start from public.bookings;
+```
+
+**Guard**
+8. With an authenticated but incomplete profile, `/book-listener` redirects to `/profile/setup?next=/book-listener`.
+
+*Note: Booking confirmation email is pending Resend (client).*
 
 ---
 
