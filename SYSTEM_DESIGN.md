@@ -405,33 +405,32 @@ Operations portal: listener management, session oversight, reports, content, ref
 
 ## Module 10: Super Admin
 
-**Status:** ⚪
+**Status:** 🟡 (core super-admin portal real; Stripe products/billing config + notifications blocked on client creds)
 
 Platform ownership: org config, feature flags, Stripe/billing config, role assignment, audit logs.
 
 ### TO-DO
-- [ ] Super-admin-only route protection (`/super-admin`)
-- [ ] Platform health dashboard (revenue, counts, alerts)
-- [ ] `org_config` table + editor (name, logo, support email, crisis links, timezone)
-- [ ] Feature flags (`feature_flags` table): open queue, donations, free booking, etc.
-- [ ] Stripe/billing config (products, prices, webhook URL metadata)
-- [ ] Role assignment (promote/demote admin, listener) via secure route
-- [ ] `audit_log` table for sensitive actions
-- [ ] System notifications (email/SMS provider + templates)
+- [x] Super-admin-only route protection (`/super-admin`) — `requireSuperAdmin()` guard on every page (role must be `super_admin`)
+- [x] Platform health dashboard (real revenue, user/listener/session counts, queue + open support alerts)
+- [x] `org_config` table + editor (name, logo, support email, timezone, crisis links) — migration `0015`, public read / super-admin write
+- [x] Feature flags (`feature_flags` table): open queue, donations, free booking, scheduled phone — editor + API + wired into queue/donate flows
+- [x] Stripe/billing status page (configured?, product price, donation range, recent payments)
+- [x] Role assignment (promote/demote admin, listener, super_admin) via secure route + last-super-admin / self-lockout guards
+- [x] `audit_log` table for sensitive actions (role changes, deactivation, config/flag edits) + audit log page
+- [~] System notifications (email/SMS provider + templates) — informational page only; blocked until Resend/Twilio
+- [~] Wire `free_booking`/`scheduled_phone` flags into booking flows — flags exist; booking UI integration deferred (booking is paid-only today)
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 10
-Fill in as Module 10 is built. Expected checklist:
-1. `/super-admin` is only reachable by a `super_admin`; everyone else is redirected.
-2. Platform health dashboard shows real revenue/counts/alerts.
-3. `org_config` edits (name, logo, support email, crisis links, timezone) reflect on the site.
-4. Feature flags toggles turn queue/donations/free-booking on/off.
-5. Stripe products/prices configured through the UI.
-6. Role assignment promotes/demotes admin & listener correctly.
-7. Sensitive actions write `audit_log` entries.
-8. System notifications (email/SMS) send with configured templates.
+1. Log in as a `super_admin` and open `/super-admin/dashboard` — real revenue/counts/alerts; a non-super-admin or logged-out user is redirected (guard works).
+2. `/super-admin/config` — edit org name/support email/timezone/logo + crisis links (JSON); persists to `org_config`; reflected on the config page (and readable by anyone).
+3. `/super-admin/features` — toggle `open_queue` or `donations`; the `/chat-queue` and `/donate` pages immediately show a "temporarily disabled" state, and their APIs reject (403).
+4. `/super-admin/users` — change any user's role (except yourself) and deactivate/reactivate. Demoting the last super_admin is blocked.
+5. Revisit `/super-admin/audit` — the role change / deactivation / config / flag edits appear with actor, action, target, details, timestamp.
+6. `/super-admin/billing` — reflects configured price + donation range + recent succeeded payments (live Stripe product editing is blocked until client provides Stripe keys).
+7. `/super-admin/notifications` — read-only status; sending needs client-supplied Resend/Twilio.
 
 ---
 
@@ -545,6 +544,11 @@ Most of the admin portal is REAL and needs no client action (role-guarded `/admi
 - **Refund issuance** — the UI records refund/support tickets; actually issuing the Stripe refund needs **Stripe keys/webhooks** (Module 4). Actual money refunds happen once Stripe is configured — 🟡
 - **Listener account provisioning** (create auth user + first-login password for a new listener) — needs **Supabase email/SMS password auth enabled** (client dashboard toggle, Module 1) + email/Resend for invites — 🟡
 - **Site-wide content (org name, crisis/support links)** — delivered in **Module 10** via `org_config` editor; no client credential — 🟡
+
+### Module 10 — Super Admin
+Most of the super-admin portal is REAL and needs no client action (role-guarded `/super-admin` dashboard, org config editor, feature flags, users/roles, audit log). Remaining module-10 items depend on client credentials:
+- **Stripe / billing product & price editing** — products/prices live in Stripe, not the DB; editing them is a Stripe Dashboard task once **Stripe keys + webhook** are configured (Module 4) — 🟡
+- **System notifications (email/SMS)** — the page is informational; actually sending needs **Resend** (Module 1) and **Twilio** (Module 6) — 🟡
 
 ### Module 11 — Content, Email & Marketing Templates
 - (all transactional emails — booking confirm, reminders, synopsis, receipt — reuse **Resend** above) — ⬜

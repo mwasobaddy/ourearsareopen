@@ -8,54 +8,94 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
+import { requireSuperAdmin } from "@/lib/super-admin-auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = {
   title: "Audit Log | Super Admin | Our Ears Are Open",
-  description: "Platform audit trail.",
+  description: "Trail of sensitive platform actions.",
 };
 
-const mockAuditLog = [
-  { id: "1", actor: "super@ourearsareopen.com", action: "config.updated", resource: "org_config", timestamp: "2026-03-07 10:30:00" },
-  { id: "2", actor: "admin@ourearsareopen.com", action: "user.role_changed", resource: "users/2", timestamp: "2026-03-07 09:15:00" },
-  { id: "3", actor: "super@ourearsareopen.com", action: "features.updated", resource: "feature_flags", timestamp: "2026-03-06 14:22:00" },
-];
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
 
-export default function SuperAdminAuditPage() {
+export default async function SuperAdminAuditPage() {
+  await requireSuperAdmin();
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("audit_log")
+    .select("id, action, actor_id, target_type, target_id, details, created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  const actorIds = Array.from(
+    new Set((data ?? []).map((l) => l.actor_id).filter(Boolean) as string[]),
+  );
+
+  const emails = new Map<string, string>();
+  if (actorIds.length > 0) {
+    const { data: actors } = await admin
+      .from("profiles")
+      .select("id, email")
+      .in("id", actorIds);
+    for (const a of actors ?? []) emails.set(a.id, a.email);
+  }
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Audit Log</h1>
-        <p className="text-muted-foreground">Sensitive actions and platform changes.</p>
+        <p className="text-muted-foreground">
+          Sensitive actions (role changes, deactivations, config and flag edits).
+        </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent actions</CardTitle>
+          <CardTitle>Recent activity (latest 200)</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Timestamp</TableHead>
+                <TableHead>When</TableHead>
                 <TableHead>Actor</TableHead>
                 <TableHead>Action</TableHead>
-                <TableHead>Resource</TableHead>
+                <TableHead>Target</TableHead>
+                <TableHead>Details</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockAuditLog.map((entry) => (
-                <TableRow key={entry.id}>
-                  <TableCell className="text-muted-foreground text-sm">{entry.timestamp}</TableCell>
-                  <TableCell>{entry.actor}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{entry.action}</Badge>
+              {(data ?? []).map((log) => (
+                <TableRow key={log.id}>
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {formatDate(log.created_at)}
                   </TableCell>
-                  <TableCell>{entry.resource}</TableCell>
+                  <TableCell>{emails.get(log.actor_id ?? "") ?? "—"}</TableCell>
+                  <TableCell className="font-medium">{log.action}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {log.target_type ?? "—"}
+                    {log.target_id ? ` · ${log.target_id.slice(0, 8)}` : ""}
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground">
+                    {log.details
+                      ? JSON.stringify(log.details)
+                      : ""}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+          {(data ?? []).length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No audit events yet.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

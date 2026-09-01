@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MessageSquare, AlertTriangle, Heart, Users } from "lucide-react";
 import { ChatQueueDonationForm } from "@/components/chat-queue/chat-queue-donation-form";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export const metadata: Metadata = {
   title: "Open Queue Chat | Our Ears Are Open",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
     "Join our open chat queue. Connect with the next available listener — minimum $1 donation. Donate what you can to help us grow.",
 };
 
-export default function ChatQueuePage() {
+export const dynamic = "force-dynamic";
+
+export default async function ChatQueuePage() {
+  const openQueue = await isFeatureEnabled("open_queue");
   return (
     <>
       {/* Crisis Warning Banner */}
@@ -80,7 +84,18 @@ export default function ChatQueuePage() {
               </ul>
             </div>
 
-            <ChatQueueDonationForm />
+            {openQueue ? (
+              <ChatQueueDonationForm />
+            ) : (
+              <div className="rounded-lg border border-border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
+                The open queue is temporarily unavailable. Please check back
+                soon, or{" "}
+                <Link href="/book-listener" className="font-medium text-primary hover:underline">
+                  book a listener
+                </Link>{" "}
+                for a scheduled conversation.
+              </div>
+            )}
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Prefer to schedule a conversation or choose your listener?{" "}

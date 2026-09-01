@@ -8,6 +8,7 @@ import {
 } from "@/lib/stripe";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getFeatureFlags } from "@/lib/feature-flags";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -44,6 +45,21 @@ export async function POST(req: NextRequest) {
     parsed = bodySchema.parse(await req.json());
   } catch {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+
+  // Respect platform feature flags for donation / queue payments.
+  const flags = await getFeatureFlags();
+  if (parsed.type === "donation" && !flags.donations) {
+    return NextResponse.json(
+      { error: "Donations are currently disabled." },
+      { status: 403 },
+    );
+  }
+  if (parsed.type === "queue" && !flags.open_queue) {
+    return NextResponse.json(
+      { error: "The open queue is currently disabled." },
+      { status: 403 },
+    );
   }
 
   let amountCents: number;

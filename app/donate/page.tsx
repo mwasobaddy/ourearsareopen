@@ -13,12 +13,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import DonationClient from "@/components/payments/donation-client";
 import { site } from "@/lib/site";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 
 export const metadata: Metadata = {
   title: "Donate | Our Ears Are Open",
   description:
     "Support Our Ears Are Open's mission. Your donations fund conversations, Wi-Fi for the community, and local services for those in need.",
 };
+
+export const dynamic = "force-dynamic";
 
 const suggestedAmounts = [
   {
@@ -43,7 +46,8 @@ const suggestedAmounts = [
   },
 ];
 
-export default function DonatePage() {
+export default async function DonatePage() {
+  const donationsEnabled = await isFeatureEnabled("donations");
   return (
     <>
       {/* Hero Section */}
@@ -106,7 +110,14 @@ export default function DonatePage() {
 
                     <Separator />
 
-                    <DonationClient />
+                    {donationsEnabled ? (
+                      <DonationClient />
+                    ) : (
+                      <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+                        Donations are temporarily disabled. Please check back
+                        soon.
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </div>

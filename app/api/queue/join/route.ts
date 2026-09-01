@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -20,6 +21,14 @@ const bodySchema = z.object({
  *   waiting customer immediately (FIFO).
  */
 export async function POST(req: NextRequest) {
+  // Respect the platform feature flag for the open queue.
+  if (!(await isFeatureEnabled("open_queue"))) {
+    return NextResponse.json(
+      { error: "The open queue is currently disabled.", disabled: true },
+      { status: 403 },
+    );
+  }
+
   const supabase = await createClient();
   const {
     data: { user },

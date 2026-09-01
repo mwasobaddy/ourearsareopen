@@ -1,78 +1,70 @@
 import type { Metadata } from "next";
+import { Bell, Mail, Phone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { requireSuperAdmin } from "@/lib/super-admin-auth";
 
 export const metadata: Metadata = {
   title: "Notifications | Super Admin | Our Ears Are Open",
-  description: "Email and SMS provider configuration.",
+  description: "Email and SMS notification configuration.",
 };
 
-export default function SuperAdminNotificationsPage() {
+const channels = [
+  {
+    icon: Mail,
+    name: "Email (transactional)",
+    detail: "Booking confirms, reminders, receipts, post-session synopsis, password reset.",
+    status: "needs Resend",
+  },
+  {
+    icon: Phone,
+    name: "SMS (Twilio)",
+    detail: "Scheduled phone-session reminders and listener alerts.",
+    status: "needs Twilio",
+  },
+  {
+    icon: Bell,
+    name: "In-app notifications",
+    detail: "Optional in-app notification center for team members.",
+    status: "deferred",
+  },
+];
+
+export default async function SuperAdminNotificationsPage() {
+  await requireSuperAdmin();
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Notifications</h1>
-        <p className="text-muted-foreground">Email and SMS provider configuration.</p>
+        <p className="text-muted-foreground">
+          Outbound notification providers and templates.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        {channels.map((c) => (
+          <Card key={c.name}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <c.icon className="h-5 w-5" />
+                {c.name}
+                <Badge variant="secondary">{c.status}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">{c.detail}</p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Email Provider</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="provider">Provider</Label>
-            <Select defaultValue="resend">
-              <SelectTrigger id="provider">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="resend">Resend</SelectItem>
-                <SelectItem value="sendgrid">SendGrid</SelectItem>
-                <SelectItem value="ses">Amazon SES</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fromEmail">From Email</Label>
-            <Input id="fromEmail" type="email" placeholder="noreply@ourearsareopen.com" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="fromName">From Name</Label>
-            <Input id="fromName" placeholder="Our Ears Are Open" />
-          </div>
-          <Button>Save email config</Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>SMS Provider (optional)</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="smsProvider">Provider</Label>
-            <Select defaultValue="twilio">
-              <SelectTrigger id="smsProvider">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="twilio">Twilio</SelectItem>
-                <SelectItem value="none">Not configured</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <p className="text-sm text-muted-foreground">API keys are stored in environment variables.</p>
-          <Button variant="outline">Save SMS config</Button>
+        <CardContent className="pt-6 text-sm text-muted-foreground">
+          Email/SMS sending depends on client-provided credentials (Resend API
+          key + verified domain, Twilio account) listed in the launch checklist.
+          Once those are in place, templates can be authored and tested in
+          Module 11.
         </CardContent>
       </Card>
     </div>
