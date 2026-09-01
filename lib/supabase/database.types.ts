@@ -286,6 +286,7 @@ export type Database = {
           full_name: string | null
           gender_identity: string | null
           id: string
+          is_active: boolean
           open_queue_enabled: boolean
           phone: string | null
           prior_therapy: string | null
@@ -311,6 +312,7 @@ export type Database = {
           full_name?: string | null
           gender_identity?: string | null
           id: string
+          is_active?: boolean
           open_queue_enabled?: boolean
           phone?: string | null
           prior_therapy?: string | null
@@ -336,6 +338,7 @@ export type Database = {
           full_name?: string | null
           gender_identity?: string | null
           id?: string
+          is_active?: boolean
           open_queue_enabled?: boolean
           phone?: string | null
           prior_therapy?: string | null
@@ -495,6 +498,63 @@ export type Database = {
           },
         ]
       }
+      support_tickets: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          internal_notes: string | null
+          kind: Database["public"]["Enums"]["support_kind"]
+          payment_id: string | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["support_status"]
+          subject: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          internal_notes?: string | null
+          kind?: Database["public"]["Enums"]["support_kind"]
+          payment_id?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["support_status"]
+          subject: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          internal_notes?: string | null
+          kind?: Database["public"]["Enums"]["support_kind"]
+          payment_id?: string | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["support_status"]
+          subject?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_tickets_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -523,19 +583,11 @@ export type Database = {
         | "canceled"
         | "failed"
       payment_type: "booking" | "donation" | "queue"
-      queue_status:
-        | "waiting"
-        | "assigned"
-        | "connected"
-        | "left"
-        | "completed"
+      queue_status: "waiting" | "assigned" | "connected" | "left" | "completed"
       session_mode: "chat" | "phone"
-      session_status:
-        | "pending"
-        | "active"
-        | "left"
-        | "ended"
-        | "completed"
+      session_status: "pending" | "active" | "left" | "ended" | "completed"
+      support_kind: "refund" | "support"
+      support_status: "open" | "resolved"
       user_role: "customer" | "listener" | "admin" | "super_admin"
     }
     CompositeTypes: {
@@ -543,119 +595,6 @@ export type Database = {
     }
   }
 }
-
-export type Tables<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof (Database["public"]["Tables"] & Database["public"]["Views"])
-    | { schema: keyof Database },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
-  }
-    ? keyof (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof Database
-}
-  ? (Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      Database[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
-    }
-    ? R
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof (Database["public"]["Tables"] &
-        Database["public"]["Views"])
-    ? (Database["public"]["Tables"] &
-        Database["public"]["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
-
-export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof Database["public"]["Tables"]
-    | { schema: keyof Database },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
-  }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof Database
-}
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof Database["public"]["Tables"]
-    ? Database["public"]["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
-
-export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof Database["public"]["Tables"]
-    | { schema: keyof Database },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof Database
-  }
-    ? keyof Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof Database
-}
-  ? Database[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof Database["public"]["Tables"]
-    ? Database["public"]["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
-
-export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof Database["public"]["Enums"]
-    | { schema: keyof Database },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof Database
-  }
-    ? keyof Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof Database
-}
-  ? Database[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof Database["public"]["Enums"]
-    ? Database["public"]["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof Database["public"]["CompositeTypes"]
-    | { schema: keyof Database },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof Database
-  }
-    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof Database
-}
-  ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof Database["public"]["CompositeTypes"]
-    ? Database["public"]["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
 
 export const Constants = {
   public: {
@@ -682,6 +621,8 @@ export const Constants = {
       queue_status: ["waiting", "assigned", "connected", "left", "completed"],
       session_mode: ["chat", "phone"],
       session_status: ["pending", "active", "left", "ended", "completed"],
+      support_kind: ["refund", "support"],
+      support_status: ["open", "resolved"],
       user_role: ["customer", "listener", "admin", "super_admin"],
     },
   },

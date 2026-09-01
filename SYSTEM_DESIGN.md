@@ -369,36 +369,37 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 
 ## Module 9: Admin Interface
 
-**Status:** ⚪
+**Status:** 🟡 (core admin portal real; community-rooms content deferred; Stripe refunds + listener auth provisioning client-blocked)
 
 Operations portal: listener management, session oversight, reports, content, refunds/support.
 
 ### TO-DO
-- [ ] Admin-only route protection (`/admin`)
-- [ ] Admin dashboard stats (active listeners, sessions, queue, donations)
-- [ ] Listener management: add/remove/deactivate; hiring/firing workflow
-- [ ] Monitor listener hours (weekly/monthly, 15hr cap) + hours dashboard
-- [ ] Monitor chat + phone sessions (list, duration, status, audit)
-- [ ] User list (consumers): search, view profile, delete/reinstate
-- [ ] Content: community rooms edit (titles, descriptions, order)
-- [ ] Reports (sessions, revenue, listener utilization, queue stats) → feed recharts
-- [ ] Refunds + support (initiate refund, internal notes)
-- [ ] Email tools (verify on signup, post-session synopsis, receipts)
+- [x] Admin-only route protection (`/admin`) — `requireAdmin()` guard (admin/super_admin) on every admin page
+- [x] Admin dashboard stats (active listeners, today's sessions, queue waiting, 24h revenue) — real counts
+- [x] Listener management: list real listeners + add (auth + profile) + deactivate/reactivate (`is_active`)
+- [x] Monitor listener hours (weekly/monthly, 15hr cap) + hours — real from `sessions` (`lib/admin-data.ts`)
+- [x] Monitor chat + phone sessions (list, duration, status, consumer/listener) + status/type filters (`SessionsFilter`)
+- [x] User list (consumers): search, view profile, deactivate/reinstate (`is_active`)
+- [x] Reports: sessions, revenue, new customers, listener utilization (users + hours/cap) — live aggregates
+- [x] Refunds + support: `support_tickets` table (refund/support, status, internal notes) + create/resolve via API
+- [x] `is_active` column + `support_tickets` table (migration `0014`) + RLS (admins only)
+- [~] Listener provisioning (auth user + first-login password) — blocked until client enables Supabase password auth + email
+- [~] Content: community rooms — no rooms feature in current build; site-wide content moves to Module 10 (org_config)
+- [ ] Email tools (verify on signup, post-session synopsis, receipts) — blocked until Resend (see client checklist)
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 9
-Fill in as Module 9 is built. Expected checklist:
-1. `/admin` is only reachable by an `admin`/`super_admin`; non-admins get redirected.
-2. Admin dashboard stats render real counts.
-3. Listener add/remove/deactivate workflow works end-to-end.
-4. Hours dashboard matches the 15hr/week data.
-5. Chat/phone session list shows accurate duration/status.
-6. User list search + profile view + delete/reinstate works.
-7. Community room content edits persist.
-8. Reports feed correct data to charts.
-9. Refund + internal support notes workflow works.
+1. Log in as an `admin`/`super_admin` and open `/admin/dashboard` — real counts appear (no mock data).
+2. As a `listener` (or logged out), visiting `/admin/*` redirects away (guard works).
+3. `/admin/listeners` — real team members with weekly hours vs the 15hr cap; toggle **Deactivate/Reactivate** (persists `is_active`).
+4. `/admin/listeners/[id]` — hours this week/month, calls/chats this week, recent sessions all real.
+5. `/admin/sessions` — real sessions with consumer/listener names, duration, status; filters + search work.
+6. `/admin/users` — real consumers; search by name/email; view profile; deactivate/reinstate.
+7. `/admin/reports` — sessions, revenue, new customers, utilization computed live from real data.
+8. `/admin/support` — create a refund/support ticket (persists to `support_tickets`); resolve/reopen works.
+9. Blocked items: Stripe refund issuance (needs Stripe keys), listener auth user (needs Supabase password/email), community-rooms content (no feature).
 
 ---
 
@@ -538,6 +539,12 @@ Core lifecycle is REAL (**chat sessions, listener notes + Complete flow, auto-cr
 - **Email/SMS reminders** (24h via Resend, 15-min SMS via Twilio) — needs **Resend** + a **Twilio SMS-capable number** (Module 6) — ⬜
 - **Voice** phone sessions from the session room — needs **Twilio** (Module 6) — ⬜
 - **No-show handling** + **session-notes PDF export** — pure app work, no client credential (not yet built) — 🟡
+
+### Module 9 — Admin Interface
+Most of the admin portal is REAL and needs no client action (role-guarded `/admin` dashboard, listener management + hours, sessions monitor, consumer management, reports, support/refund tickets). Remaining module-9 items depend on already-listed integrations + no extra tool for the core:
+- **Refund issuance** — the UI records refund/support tickets; actually issuing the Stripe refund needs **Stripe keys/webhooks** (Module 4). Actual money refunds happen once Stripe is configured — 🟡
+- **Listener account provisioning** (create auth user + first-login password for a new listener) — needs **Supabase email/SMS password auth enabled** (client dashboard toggle, Module 1) + email/Resend for invites — 🟡
+- **Site-wide content (org name, crisis/support links)** — delivered in **Module 10** via `org_config` editor; no client credential — 🟡
 
 ### Module 11 — Content, Email & Marketing Templates
 - (all transactional emails — booking confirm, reminders, synopsis, receipt — reuse **Resend** above) — ⬜

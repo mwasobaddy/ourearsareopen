@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,27 +12,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { requireAdmin } from "@/lib/admin-auth";
+import { getAllListenerStats, HOURS_CAP } from "@/lib/admin-data";
+import { ToggleActiveButton } from "@/components/admin/listener-actions";
 
 export const metadata: Metadata = {
   title: "Listeners | Admin | Our Ears Are Open",
   description: "Manage team members (listeners).",
 };
 
-const mockListeners = [
-  { id: "1", name: "Jordan Lee", username: "jordan.lee", hoursThisWeek: 12, status: "active" },
-  { id: "2", name: "Alex Smith", username: "alex.smith", hoursThisWeek: 15, status: "active" },
-  { id: "3", name: "Morgan Davis", username: "morgan.davis", hoursThisWeek: 8, status: "active" },
-  { id: "4", name: "Sam Wilson", username: "sam.wilson", hoursThisWeek: 0, status: "inactive" },
-];
+export default async function AdminListenersPage() {
+  await requireAdmin();
+  const listeners = await getAllListenerStats();
 
-export default function AdminListenersPage() {
   return (
     <>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Listeners</h1>
           <p className="text-muted-foreground">
-            Manage team members (listeners)
+            Manage team members (listeners) and monitor their hours
           </p>
         </div>
         <Button asChild>
@@ -47,48 +47,92 @@ export default function AdminListenersPage() {
         <CardHeader>
           <CardTitle>Team members</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Add, edit, or deactivate listeners. 15 hr/week cap applies.
+            Weekly hours are computed from real completed sessions. The{" "}
+            {HOURS_CAP} hr/week cap applies (1099).
           </p>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Username</TableHead>
-                <TableHead>Hours this week</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {mockListeners.map((listener) => (
-                <TableRow key={listener.id}>
-                  <TableCell className="font-medium">{listener.name}</TableCell>
-                  <TableCell>{listener.username}</TableCell>
-                  <TableCell>
-                    {listener.hoursThisWeek} / 15 hrs
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        listener.status === "active" ? "default" : "secondary"
-                      }
-                    >
-                      {listener.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/admin/listeners/${listener.id}`}>
-                        View
-                      </Link>
-                    </Button>
-                  </TableCell>
+          {listeners.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground">
+              <p className="text-lg font-medium">No listeners yet</p>
+              <p className="mt-1 text-sm">
+                Add your first team member to get started.
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="w-40">Hours this week</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {listeners.map((listener) => {
+                  const over = listener.hoursThisWeek > HOURS_CAP;
+                  return (
+                    <TableRow key={listener.id}>
+                      <TableCell className="font-medium">
+                        <Link
+                          href={`/admin/listeners/${listener.id}`}
+                          className="hover:underline"
+                        >
+                          {listener.full_name ?? listener.email}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {listener.email}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Progress
+                            value={Math.min(
+                              100,
+                              (listener.hoursThisWeek / HOURS_CAP) * 100,
+                            )}
+                            className="h-2 w-24"
+                          />
+                          <span className="text-sm">
+                            {listener.hoursThisWeek} / {HOURS_CAP}
+                          </span>
+                        </div>
+                        {over && (
+                          <span className="mt-1 flex items-center gap-1 text-xs text-destructive">
+                            <AlertTriangle className="h-3 w-3" />
+                            Over cap
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={listener.is_active ? "default" : "secondary"}
+                        >
+                          {listener.is_active ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/admin/listeners/${listener.id}`}>
+                              View
+                            </Link>
+                          </Button>
+                          <ToggleActiveButton
+                            profileId={listener.id}
+                            isActive={listener.is_active}
+                            name={listener.full_name ?? listener.email}
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </>

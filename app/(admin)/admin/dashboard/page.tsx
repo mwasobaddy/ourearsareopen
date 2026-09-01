@@ -1,13 +1,67 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 import { StatsCard } from "@/components/dashboard/stats-card";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Admin Dashboard | Our Ears Are Open",
   description: "Administration dashboard for platform oversight.",
 };
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  await requireAdmin();
+  const admin = createAdminClient();
+
+  const now = new Date();
+  const dayStart = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).toISOString();
+  const dayEnd = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1,
+  ).toISOString();
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ count: listenerCount }, { count: sessionCount }, { count: queueCount }] =
+    await Promise.all([
+      admin
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "listener")
+        .eq("is_active", true),
+      admin
+        .from("sessions")
+        .select("id", { count: "exact", head: true })
+        .gte("started_at", dayStart)
+        .lt("started_at", dayEnd),
+      admin
+        .from("queue_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "waiting"),
+    ]);
+
+  const { data: recentPayments } = await admin
+    .from("payments")
+    .select("amount_cents")
+    .eq("status", "succeeded")
+    .gte("created_at", yesterday);
+
+  const donations24h = (recentPayments ?? []).reduce(
+    (sum, p) => sum + p.amount_cents,
+    0,
+  );
+
   return (
     <>
       <div>
@@ -20,26 +74,26 @@ export default function AdminDashboardPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard
           title="Active Listeners"
-          value="8"
-          description="Currently online"
+          value={listenerCount ?? 0}
+          description="Currently enabled"
           icon="Headphones"
         />
         <StatsCard
-          title="Today's Sessions"
-          value="24"
-          description="Completed so far"
+          title="Sessions Today"
+          value={sessionCount ?? 0}
+          description="Started today"
           icon="Calendar"
         />
         <StatsCard
-          title="Queue Length"
-          value="3"
-          description="Waiting for listener"
+          title="Customers Waiting"
+          value={queueCount ?? 0}
+          description="Open chat queue"
           icon="Users"
         />
         <StatsCard
-          title="Recent Donations"
-          value="$127"
-          description="Last 24 hours"
+          title="Revenue (24h)"
+          value={`$${((donations24h ?? 0) / 100).toFixed(2)}`}
+          description="Succeeded payments"
           icon="DollarSign"
         />
       </div>
@@ -50,34 +104,32 @@ export default function AdminDashboardPage() {
             <CardTitle>Quick actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-2">
-            <a
-              href="/admin/listeners"
-              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Manage listeners
-            </a>
-            <a
-              href="/admin/sessions"
-              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
-            >
-              View sessions
-            </a>
-            <a
-              href="/admin/users"
-              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
-            >
-              Manage users
-            </a>
+            <Button asChild>
+              <Link href="/admin/listeners">Manage listeners</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/admin/sessions">View sessions</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/admin/users">Manage users</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/admin/reports">Reports</Link>
+            </Button>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
+            <CardTitle>Oversight</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Activity feed will show recent platform events when wired to API.
+              Track listener hours against the 15 hr/week cap, review sessions,
+              and manage consumer accounts from the admin portal.
             </p>
+            <Button variant="outline" className="mt-4" asChild>
+              <Link href="/admin/listeners">View listener hours</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>

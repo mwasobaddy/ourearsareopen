@@ -1,73 +1,54 @@
 import type { Metadata } from "next";
-import { FileText, AlertTriangle } from "lucide-react";
+import { FileText, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const metadata: Metadata = {
   title: "Content | Admin — Our Ears Are Open",
-  description: "Edit community rooms and crisis page content.",
+  description: "Edit community rooms and site content.",
 };
 
-export default function AdminContentPage() {
+export default async function AdminContentPage() {
+  await requireAdmin();
   return (
     <>
       <h1 className="text-2xl font-bold tracking-tight">Content</h1>
       <p className="text-muted-foreground">
-        Edit community room titles, descriptions, and crisis page content.
+        Edit community room titles/descriptions and site-wide copy.
       </p>
-      <Tabs defaultValue="rooms">
-        <TabsList>
-          <TabsTrigger value="rooms">Community Rooms</TabsTrigger>
-          <TabsTrigger value="crisis">Crisis Page</TabsTrigger>
-        </TabsList>
-        <TabsContent value="rooms" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Community Rooms
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Wire to GET/PATCH /api/admin/content/rooms
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="room-title">Room Title</Label>
-                <Input id="room-title" placeholder="e.g. Anxiety" />
-              </div>
-              <div>
-                <Label htmlFor="room-desc">Description</Label>
-                <Textarea id="room-desc" placeholder="Room description..." rows={3} />
-              </div>
-              <Button>Save changes</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="crisis" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-crisis" />
-                Crisis Page Content
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Wire to GET/PATCH /api/content/crisis
-              </p>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                Edit crisis resources, links, and copy.
-              </p>
-              <Button className="mt-4">Save changes</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Info className="h-5 w-5" />
+            Community rooms
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            The community-rooms feature is not part of the current build (the
+            platform is focused on 1:1 listening sessions, queue, and payments).
+            Editable site-wide content (org name, logo, support/crisis links,
+            timezone, feature flags) is delivered in{" "}
+            <strong>Module 10 (Super Admin)</strong> via the org_config editor.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Marketing & legal copy
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            Terms, Privacy, and Cancellation Policy page copy are managed in the
+            client checklist (Module 11 — Content & Marketing templates).
+          </p>
+        </CardContent>
+      </Card>
     </>
   );
 }
