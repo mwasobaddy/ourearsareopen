@@ -10,9 +10,12 @@ import {
   UserPlus,
   UserMinus,
   LogOut,
+  StickyNote,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
@@ -40,6 +43,9 @@ export function SessionRoom({ origin, refId }: Props) {
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [uid, setUid] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const joinedRef = useRef(false);
   const channelRef = useRef<
@@ -96,6 +102,7 @@ export function SessionRoom({ origin, refId }: Props) {
       const sess = data.session as SessionRow;
       if (cancelled) return;
       setSession(sess);
+      setNotes(sess.notes ?? "");
       setLoading(false);
 
       // Load message history.
@@ -223,6 +230,55 @@ export function SessionRoom({ origin, refId }: Props) {
     if (error) toast.error("Couldn't end the session.");
   }
 
+  async function handleSaveNotes() {
+    if (!session) return;
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`/api/session/${session.id}/notes`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Couldn't save notes.");
+        return;
+      }
+      toast.success("Notes saved.");
+    } catch {
+      toast.error("Couldn't save notes.");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
+  async function handleComplete() {
+    if (!session) return;
+    setCompleting(true);
+    try {
+      const res = await fetch(`/api/session/${session.id}/complete`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't finalize the session.");
+        return;
+      }
+      setSession(data.session);
+      if (data.document) {
+        toast.success(
+          "Session completed. Notes saved to the customer's record.",
+        );
+      } else {
+        toast.success("Session completed.");
+      }
+    } catch {
+      toast.error("Couldn't finalize the session.");
+    } finally {
+      setCompleting(false);
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -293,6 +349,50 @@ export function SessionRoom({ origin, refId }: Props) {
             ? "Voice calls connect via the listener dialer (Twilio — client setup pending)."
             : "Chat is live — messages appear in real time for both of you."}
         </div>
+
+        {session.listener_id === uid && (
+          <div className="rounded-lg border border-border bg-background p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+              <StickyNote className="h-4 w-4 text-primary" />
+              Debrief notes
+              <span className="text-xs font-normal text-muted-foreground">
+                (visible to the listener & admins)
+              </span>
+            </div>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add private session notes…"
+              rows={3}
+              disabled={isOver}
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSaveNotes}
+                disabled={isOver || savingNotes}
+              >
+                {savingNotes ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                Save notes
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleComplete}
+                disabled={isOver || completing}
+              >
+                {completing ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                )}
+                Complete session
+              </Button>
+            </div>
+          </div>
+        )}
 
         {messages.map((m) =>
           m.kind === "system" ? (

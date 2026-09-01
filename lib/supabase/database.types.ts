@@ -117,6 +117,64 @@ export type Database = {
           },
         ]
       }
+      documents: {
+        Row: {
+          created_at: string
+          id: string
+          listener_id: string | null
+          session_id: string
+          storage_path: string | null
+          summary: string | null
+          title: string
+          type: Database["public"]["Enums"]["document_type"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          listener_id?: string | null
+          session_id: string
+          storage_path?: string | null
+          summary?: string | null
+          title: string
+          type?: Database["public"]["Enums"]["document_type"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          listener_id?: string | null
+          session_id?: string
+          storage_path?: string | null
+          summary?: string | null
+          title?: string
+          type?: Database["public"]["Enums"]["document_type"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_listener_id_fkey"
+            columns: ["listener_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           body: string
@@ -455,6 +513,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      document_type: "session_notes" | "consent" | "other"
       payment_status:
         | "requires_payment_method"
         | "requires_confirmation"
@@ -609,6 +668,7 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      document_type: ["session_notes", "consent", "other"],
       payment_status: [
         "requires_payment_method",
         "requires_confirmation",

@@ -334,33 +334,36 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 
 ## Module 8: Session & Call Management
 
-**Status:** ⚪
+**Status:** 🟡 (session lifecycle + notes + docs + history done; no-show/reminders/post-session email blocked on client integrations)
 
 Full session lifecycle, notes, history, documents, no-shows, reminders, post-session emails.
 
 ### TO-DO
-- [ ] Session lifecycle states (scheduled, in_progress, completed, no_show, cancelled)
-- [ ] Default 15-min length; 14-min warning; auto-end; manual extension
-- [ ] Private/shared session notes (visible to same-consumer team members)
-- [ ] Session history for customer (past sessions, listener, type, documents)
-- [ ] `documents` table + session notes PDF download
-- [ ] Post-session email to consumer (synopsis + encouraging words) — automatic
+- [x] Session lifecycle states (chat/phone via `sessions`; statuses `pending → active → completed`, or `left`/`ended`)
+- [x] Session notes (`sessions.notes` + listener-only `PUT /api/session/[id]/notes`; via `SessionRoom` debrief panel)
+- [x] `documents` table + `document_type` enum (session_notes/consent/other) with RLS (customer sees own, listeners/admins see assigned)
+- [x] Finalize flow: `POST /api/session/[id]/complete` → `completed` + `ended_at`; auto-creates a `session_notes` `documents` row when the listener recorded notes
+- [x] Listener session history page (`/team-member/sessions` — past sessions, mode, status, notes badge, open/continue link)
+- [x] Customer documents tab (profile "Documents" now lists saved session-notes/consent documents from the customer's own rows)
+- [x] RLS: customer sees own history; listeners see assigned; admins see all (`is_admin()` helper)
+- [ ] Default session timing: 15-min length, 14-min warning, auto-end, manual extension
+- [ ] Session notes PDF download/export from a `documents` row
+- [ ] Post-session email to consumer (synopsis + encouraging words) — automatic *(Blocked until Resend configured)*
 - [ ] No-show handling (mark no-show, free slot)
-- [ ] Email/SMS reminders (24h, 15 min before session)
-- [ ] RLS: customer sees own history; listeners see assigned; admins see all
+- [ ] Email/SMS reminders (24h, 15 min before session): 24h via Resend, 15-min via Twilio *(Blocked until client creds)*
+- [ ] Customer-facing session history list (past sessions + listener/type) — currently covered by bookings "History" + Documents tab
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 8
-Fill in as Module 8 is built. Expected checklist:
-1. A booked session moves through `scheduled → in_progress → completed` (or `no_show`/`cancelled`) correctly.
-2. Private/shared notes saved per session are visible only to the intended team members for that consumer.
-3. Customer session history shows past sessions with listener/type/documents.
-4. A PDF of session notes downloads from the `documents` row.
-5. Automatic post-session email (synopsis) is sent *(Blocked until Resend configured)*.
-6. No-show handling frees the slot.
-7. 24h + 15-min reminders fire *(Blocked until email/SMS configured)*.
+1. Open a chat session as a listener (`/team-member` → Open Queue → accept → `/session/<entry>?origin=queue`).
+2. In the session, the listener sees a **Debrief notes** panel: type notes, click **Save notes**, click **Complete session**. Confirm the session becomes `completed`.
+3. Verify the auto-created document: log in as the consumer, open Profile → **Documents**, confirm the "Session notes" card appears with the synopsis.
+4. As the listener, open `/team-member/sessions` and confirm the completed session appears with the `Has notes` badge; "View / open" reopens it.
+5. A session marked **End Session** transitions to `ended` (not completed/docs).
+6. `sessions` RLS — confirm a customer can only see their own sessions and a listener only their assigned ones.
+7. Timing (14-min warning / auto-end), notes-PDF export, no-show, reminders, and post-session email remain **Blocked** until client credentials (see client checklist).
 
 ---
 
@@ -530,7 +533,11 @@ Core portal is REAL (**queue toggle/pool/accept**, weekly availability, dashboar
 - **Voice** sessions from the dashboard — ⬜ (Twilio above)
 
 ### Module 8 — Session & Call Management
-- (reminders / emails reuse Resend + Twilio above; SMS reminders need a Twilio SMS-capable number) — ⬜ / 🟡
+Core lifecycle is REAL (**chat sessions, listener notes + Complete flow, auto-created session-notes documents, listener `/team-member/sessions` history, customer Documents tab**) — no client action needed for those. Remaining items block on the integrations above:
+- **Post-session synopsis email** (auto after a session completes) — needs **Resend** configured (Module 1) — ⬜
+- **Email/SMS reminders** (24h via Resend, 15-min SMS via Twilio) — needs **Resend** + a **Twilio SMS-capable number** (Module 6) — ⬜
+- **Voice** phone sessions from the session room — needs **Twilio** (Module 6) — ⬜
+- **No-show handling** + **session-notes PDF export** — pure app work, no client credential (not yet built) — 🟡
 
 ### Module 11 — Content, Email & Marketing Templates
 - (all transactional emails — booking confirm, reminders, synopsis, receipt — reuse **Resend** above) — ⬜

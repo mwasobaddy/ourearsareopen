@@ -57,6 +57,16 @@ export type Booking = {
   updated_at: string | null;
 };
 
+type DocumentRow = {
+  id: string;
+  title: string;
+  type: string;
+  summary: string | null;
+  storage_path: string | null;
+  session_id: string;
+  created_at: string;
+};
+
 export function ProfileView({ profile }: { profile: ProfileData }) {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +75,26 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
   const [deleting, setDeleting] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [loadingDocuments, setLoadingDocuments] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function loadDocs() {
+      const { data } = await supabase
+        .from("documents")
+        .select("id, title, type, summary, storage_path, session_id, created_at")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false });
+      if (active) setDocuments((data as DocumentRow[]) ?? []);
+      if (active) setLoadingDocuments(false);
+    }
+    loadDocs();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.id]);
 
   useEffect(() => {
     let active = true;
@@ -342,14 +372,57 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-6">
-          <Card className="border-border text-center">
-            <CardContent className="py-10">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
-              <p className="mt-3 text-muted-foreground">
-                No saved documents yet.
-              </p>
-            </CardContent>
-          </Card>
+          {loadingDocuments ? (
+            <Card className="border-border text-center">
+              <CardContent className="py-10">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground/50" />
+              </CardContent>
+            </Card>
+          ) : documents.length === 0 ? (
+            <Card className="border-border text-center">
+              <CardContent className="py-10">
+                <FileText className="mx-auto h-12 w-12 text-muted-foreground/50" />
+                <p className="mt-3 text-muted-foreground">
+                  No saved documents yet. Session notes shared by your listener
+                  will appear here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {documents.map((doc) => (
+                <Card key={doc.id} className="border-border">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <FileText className="h-5 w-5 text-primary" />
+                      {doc.title}
+                      <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">
+                        {doc.type.replace("_", " ")}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {doc.summary ? (
+                      <p className="text-sm text-muted-foreground">
+                        {doc.summary}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No summary provided.
+                      </p>
+                    )}
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {new Date(doc.created_at).toLocaleDateString(undefined, {
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="info" className="mt-6">
