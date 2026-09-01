@@ -188,6 +188,7 @@ export type Database = {
           full_name: string | null
           gender_identity: string | null
           id: string
+          open_queue_enabled: boolean
           phone: string | null
           prior_therapy: string | null
           profile_complete: boolean | null
@@ -211,6 +212,7 @@ export type Database = {
           full_name?: string | null
           gender_identity?: string | null
           id: string
+          open_queue_enabled?: boolean
           phone?: string | null
           prior_therapy?: string | null
           profile_complete?: boolean | null
@@ -234,6 +236,7 @@ export type Database = {
           full_name?: string | null
           gender_identity?: string | null
           id?: string
+          open_queue_enabled?: boolean
           phone?: string | null
           prior_therapy?: string | null
           profile_complete?: boolean | null
@@ -257,13 +260,73 @@ export type Database = {
           },
         ]
       }
+      queue_entries: {
+        Row: {
+          assigned_at: string | null
+          assigned_listener_id: string | null
+          created_at: string
+          id: string
+          payment_id: string | null
+          position: number | null
+          status: Database["public"]["Enums"]["queue_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_listener_id?: string | null
+          created_at?: string
+          id?: string
+          payment_id?: string | null
+          position?: number | null
+          status?: Database["public"]["Enums"]["queue_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_listener_id?: string | null
+          created_at?: string
+          id?: string
+          payment_id?: string | null
+          position?: number | null
+          status?: Database["public"]["Enums"]["queue_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "queue_entries_assigned_listener_id_fkey"
+            columns: ["assigned_listener_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_entries_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "queue_entries_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      decrement_waiting_positions: { Args: never; Returns: undefined }
       delete_my_account: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }
+      is_listener: { Args: never; Returns: boolean }
     }
     Enums: {
       book_type: "phone" | "chat"
@@ -281,7 +344,13 @@ export type Database = {
         | "succeeded"
         | "canceled"
         | "failed"
-      payment_type: "booking" | "donation"
+      payment_type: "booking" | "donation" | "queue"
+      queue_status:
+        | "waiting"
+        | "assigned"
+        | "connected"
+        | "left"
+        | "completed"
       user_role: "customer" | "listener" | "admin" | "super_admin"
     }
     CompositeTypes: {
@@ -423,7 +492,8 @@ export const Constants = {
         "canceled",
         "failed",
       ],
-      payment_type: ["booking", "donation"],
+      payment_type: ["booking", "donation", "queue"],
+      queue_status: ["waiting", "assigned", "connected", "left", "completed"],
       user_role: ["customer", "listener", "admin", "super_admin"],
     },
   },

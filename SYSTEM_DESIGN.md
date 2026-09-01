@@ -235,31 +235,32 @@ Code is complete and `pnpm build` passes, but end-to-end payment requires **real
 
 ## Module 5: Open Chat Queue
 
-**Status:** ⚪
+**Status:** 🟡 (code done; queue payment requires client Stripe keys to test)
 
 Users pay minimum ($1) to join a live queue; the next available listener is assigned; position updates in realtime.
 
 ### TO-DO
-- [ ] `queue_entries` table (user_id, payment_id, status: waiting/assigned/left, assigned_listener_id)
-- [ ] `app/api/queue/join/route.ts` — verify min payment, insert entry, match next available listener
-- [ ] Realtime position updates via Supabase Realtime channel on `queue_entries`
-- [ ] Wire `/chat-queue` page (replace the simulated timeout with real queue join)
-- [ ] Listener "available for queue" toggle
+- [x] Migrations `0008_queue.sql`, `0009_queue_position.sql`, `0010_queue_positions_rpc.sql` — `queue_entries` table, RLS, `profiles.open_queue_enabled`, `position`, `decrement_waiting_positions()` RPC, realtime publication
+- [x] `app/api/queue/join/route.ts` — verify succeeded `queue` payment, insert entry, FIFO-match next available listener (`open_queue_enabled`)
+- [x] Realtime position updates via Supabase Realtime channel on `queue_entries` (`QueueStatus` component)
+- [x] `/chat-queue/success` page + `QueueStatus` client component (join + live position → assignment)
+- [x] `app/api/queue/toggle/route.ts` — listener "available for queue" toggle (assigns earliest waiting customer when turning ON)
+- [x] `app/api/stripe/payment-intent/route.ts` widened to `type: "queue"` (min $1)
+- [x] Rewritten queue payment form (`chat-queue-donation-form.tsx`) → PaymentIntent → `PaymentForm` → `/chat-queue/success?payment=`
 - [ ] "Listeners available now" stat for widget
-- [ ] Assign next customer to available listener (business logic)
 - [ ] Leave queue + optional refund
-- [ ] RLS: customer sees own entry; listeners see waiting pool; admins see all
+- [ ] RLS: listeners see waiting pool; admins see all (customer sees own entry — done)
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 5
-Fill in as Module 5 is built. Expected checklist:
-1. Paying the $1 minimum and joining `/chat-queue` inserts a `queue_entries` row with `status = waiting`.
-2. The widget shows a realtime position that decrements as earlier customers are assigned.
-3. When a listener toggles available, the next waiting customer is auto-assigned and both see the pairing update in realtime.
+Expected checklist (blocked until client Stripe keys are provided):
+1. Paying the $1 minimum and joining `/chat-queue` inserts a `queue_entries` row with `status = waiting` (or `assigned` if a listener is available).
+2. The `QueueStatus` widget shows a realtime position that decrements as earlier customers are assigned.
+3. When a listener toggles available (`/api/queue/toggle`), the next waiting customer is auto-assigned and the assignment updates in realtime.
 4. Leaving the queue updates status (and refunds if applicable).
-5. RLS: a customer sees only their own entry; a listener sees the waiting pool; admin sees all.
+5. RLS: a customer sees only their own entry.
 
 ---
 
@@ -510,7 +511,8 @@ This section captures decisions that span multiple modules. Revisit as you build
 > ℹ️ **Note on PayPal:** The platform accepts PayPal **through Stripe** (`paypal` become a Stripe payment method). No separate PayPal developer account/API keys are needed. If the client wants standalone PayPal buttons (old design), that is a separate integration — flag it.
 
 ### Module 5 — Open Chat Queue (not yet reached)
-<!-- add client credentials for queue payments (reuses Stripe) + any queue-specific service here when Module 5 is built -->
+### Module 5 — Open Chat Queue
+The queue join payment **reuses the same Stripe account** as Modules 1/4 (no new provider). The $1 minimum charge flows through the same Stripe PaymentIntent → dashboard → webhooks. Once the client enables **Module 4 Stripe keys + webhook endpoint + payment methods**, queue payments work automatically. — ⬜ (reuses Stripe above)
 
 ### Module 6 — Realtime Voice & Chat
 

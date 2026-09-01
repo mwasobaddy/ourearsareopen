@@ -1,75 +1,117 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Loader2, CheckCircle } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import PaymentForm from "@/components/payments/payment-form";
+import { isStripeConfigured } from "@/lib/stripe-client";
 
 const SUGGESTED_AMOUNTS = [
-  { value: "1", label: "$1", description: "Minimum" },
-  { value: "5", label: "$5" },
-  { value: "10", label: "$10" },
-  { value: "25", label: "$25" },
-  { value: "custom", label: "Other" },
+  { value: "100", label: "$1", description: "Minimum" },
+  { value: "500", label: "$5" },
+  { value: "1000", label: "$10" },
+  { value: "2500", label: "$25" },
 ];
 
-const MINIMUM_DOLLARS = 1;
+const MINIMUM_CENTS = 100;
+
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
 
 export function ChatQueueDonationForm() {
-  const [selectedAmount, setSelectedAmount] = useState("5");
+  const [amountCents, setAmountCents] = useState(500);
   const [customAmount, setCustomAmount] = useState("");
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasJoined, setHasJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getAmountInDollars = (): number => {
-    if (selectedAmount === "custom") {
-      const parsed = parseFloat(customAmount.replace(/[^0-9.]/g, ""));
-      return isNaN(parsed) ? 0 : parsed;
-    }
-    return parseFloat(selectedAmount);
-  };
+  const amountLabel = useMemo(
+    () => money.format(amountCents / 100),
+    [amountCents],
+  );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  function chooseAmount(cents: number) {
+    setCustomAmount("");
+    setAmountCents(cents);
     setError(null);
-    const amount = getAmountInDollars();
+  }
 
-    if (amount < MINIMUM_DOLLARS) {
-      setError(`Minimum donation is $${MINIMUM_DOLLARS.toFixed(2)} to join the queue.`);
+  function handleCustomAmount(e: React.ChangeEvent<HTMLInputElement>) {
+    const raw = e.target.value.replace(/[^\d]/g, "");
+    setCustomAmount(raw);
+    const numeric = parseInt(raw || "0", 10);
+    if (!Number.isNaN(numeric) && numeric >= 1) {
+      setAmountCents(numeric * 100);
+    }
+    setError(null);
+  }
+
+  async function handleStart(e: React.FormEvent) {
+    e.preventDefault();
+    if (amountCents < MINIMUM_CENTS) {
+      setError(`Minimum donation is ${money.format(MINIMUM_CENTS / 100)} to join the queue.`);
+      return;
+    }
+
+    if (!isStripeConfigured()) {
+      setError(
+        "Payments aren't configured yet. Please add your Stripe keys in .env.local.",
+      );
       return;
     }
 
     setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stripe/payment-intent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "queue", amount_cents: amountCents }),
+      });
 
-    // TODO: Integrate with payment provider (Stripe, etc.)
-    // For now, simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Couldn't start the payment.");
+      }
 
-    setIsSubmitting(false);
-    setHasJoined(true);
-  };
+      const data = await res.json();
+      setClientSecret(data.clientSecret);
+      setPaymentId(data.paymentId);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Couldn't start the payment.";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-  if (hasJoined) {
+  if (clientSecret && paymentId) {
     return (
-      <Card className="border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/20">
-        <CardContent className="p-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-            <CheckCircle className="h-8 w-8" />
-          </div>
-          <h3 className="text-xl font-bold text-foreground">
-            You&apos;re in the Queue
-          </h3>
-          <p className="mt-2 text-muted-foreground">
-            Thank you for your support. A listener will connect with you shortly.
-            Stay on this page — the chat will appear when someone is available.
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle>Join the Queue</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {amountLabel} donation — complete payment to be added to the queue.
           </p>
-          <p className="mt-4 text-sm text-muted-foreground">
-            Estimated wait: usually under 5 minutes when listeners are online.
-          </p>
+        </CardHeader>
+        <CardContent>
+          <Separator className="mb-6" />
+          <PaymentForm
+            clientSecret={clientSecret}
+            amountLabel={amountLabel}
+            successUrl={`/chat-queue/success?payment=${paymentId}`}
+          />
         </CardContent>
       </Card>
     );
@@ -84,16 +126,13 @@ export function ChatQueueDonationForm() {
         </p>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleStart} className="space-y-6">
           <div className="space-y-3">
             <Label>Select or enter amount</Label>
             <RadioGroup
-              value={selectedAmount}
-              onValueChange={(v) => {
-                setSelectedAmount(v);
-                setError(null);
-              }}
-              className="grid grid-cols-2 gap-3 sm:grid-cols-5"
+              value={String(amountCents)}
+              onValueChange={(v) => chooseAmount(Number(v))}
+              className="grid grid-cols-2 gap-3 sm:grid-cols-4"
             >
               {SUGGESTED_AMOUNTS.map((amt) => (
                 <div key={amt.value}>
@@ -119,29 +158,21 @@ export function ChatQueueDonationForm() {
               ))}
             </RadioGroup>
 
-            {selectedAmount === "custom" && (
-              <div className="mt-4 space-y-2">
-                <Label htmlFor="custom-amount">Amount (USD)</Label>
-                <Input
-                  id="custom-amount"
-                  type="number"
-                  min={MINIMUM_DOLLARS}
-                  step="0.01"
-                  placeholder="1.00"
-                  value={customAmount}
-                  onChange={(e) => {
-                    setCustomAmount(e.target.value);
-                    setError(null);
-                  }}
-                  className="max-w-[140px]"
-                />
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="custom-amount">Or enter a custom amount (USD)</Label>
+              <Input
+                id="custom-amount"
+                type="text"
+                inputMode="numeric"
+                placeholder="5.00"
+                value={customAmount}
+                onChange={handleCustomAmount}
+                className="max-w-[180px]"
+              />
+            </div>
           </div>
 
-          {error && (
-            <p className="text-sm text-crisis">{error}</p>
-          )}
+          {error && <p className="text-sm text-crisis">{error}</p>}
 
           <Button
             type="submit"
@@ -152,17 +183,12 @@ export function ChatQueueDonationForm() {
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
+                Preparing secure checkout…
               </>
             ) : (
               <>
-                Donate{" "}
-                {selectedAmount === "custom"
-                  ? customAmount
-                    ? `$${getAmountInDollars().toFixed(2)}`
-                    : `$${MINIMUM_DOLLARS}.00`
-                  : `$${selectedAmount}`}{" "}
-                & Join Queue
+                <Users className="mr-2 h-4 w-4" />
+                Donate {amountLabel} &amp; Join Queue
               </>
             )}
           </Button>

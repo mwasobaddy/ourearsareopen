@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const bodySchema = z.object({
-  type: z.enum(["booking", "donation"]),
+  type: z.enum(["booking", "donation", "queue"]),
   bookings_id: z.string().uuid().optional(),
   amount_cents: z.number().int().positive().optional(),
   currency: z.string().min(3).max(3).optional(),
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     amountCents = parsed.amount_cents ?? MIN_DONATION_CENTS;
     if (amountCents < MIN_DONATION_CENTS || amountCents > MAX_DONATION_CENTS) {
       return NextResponse.json(
-        { error: "Donation amount is outside the allowed range." },
+        { error: "Amount is outside the allowed range." },
         { status: 400 },
       );
     }
