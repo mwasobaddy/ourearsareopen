@@ -266,31 +266,31 @@ Expected checklist (blocked until client Stripe keys are provided):
 
 ## Module 6: Realtime — Voice & Chat
 
-**Status:** ⚪
+**Status:** 🟡 (realtime chat done; voice/Twilio portion blocked on client creds)
 
-In-session chat (real-time text) and voice calls (phone appointments). Voice via Twilio/LiveKit initiated by the listener dialer. Chat via Supabase Realtime.
+In-session chat (real-time text) and voice calls (phone appointments). Voice via Twilio/LiveKit initiated by the listener dialer (🔴 blocked until client credentials). Chat via Supabase Realtime — fully working now.
 
 ### TO-DO
-- [ ] `sessions` table (booking_id/queue_ref, user_id, listener_id, status, started_at, ended_at, room_id, notes)
-- [ ] Realtime chat: `messages` table + Supabase Realtime channel subscribe/publish
-- [ ] Wire `/session/[id]` chat UI to realtime messages
-- [ ] Twilio/LiveKit: `app/api/twilio/token/route.ts` to mint access token
-- [ ] Listener dialer — initiate outbound call via website (no consumer call-in)
-- [ ] Call start/end/disconnect handling
-- [ ] Session state notifications ("Listener joined", "Listener left")
-- [ ] Voice session duration recording
+- [x] Migration `0011_realtime_sessions.sql` — `sessions` table (mode chat/phone, status pending/active/left/ended/completed, origin from queue_entry_id or booking_id, notes, started_at/ended_at) + RLS (participants read/update, admins all) + realtime publication
+- [x] `messages` table (session_id, sender_id, body) + RLS (participants read/insert) + realtime publication
+- [x] `app/api/session/open/route.ts` — open/fetch a session from a queue entry or booking (participant-guarded; marks queue entry `connected`)
+- [x] Realtime chat UI in `/session/[id]` (`components/session/session-room.tsx`) — live messages, send, history, participant status notifications ("participant left")
+- [x] Session state notifications ("participant left", "you left") surfaced as system chips in the chat feed
+- [x] `QueueStatus` assigned view now links into `/session/<entry>?origin=queue`
+- [ ] `app/api/twilio/token/route.ts` to mint access token — 🔴 blocked (Twilio creds)
+- [ ] Listener dialer — initiate outbound call via website (no consumer call-in) — 🔴 blocked
+- [ ] Call start/end/disconnect handling — 🔴 blocked
+- [ ] Voice session duration recording — 🔴 blocked (requires Twilio/LiveKit)
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 6
-Fill in as Module 6 is built. Expected checklist:
-1. On `/session/[id]`, opening two browser tabs as customer + listener shows messages appearing in realtime via Supabase Realtime (no page refresh).
-2. A `sessions` row is created/updated with correct status transitions.
-3. `app/api/twilio/token` mints a valid access token (call via website Twilio SDK — **Blocked until client provides Twilio credentials**).
-4. Listener-initiated outbound call connects and call start/end are recorded.
-5. "Listener joined"/"Listener left" status notifications appear in the session.
-6. Voice duration is recorded for hours tracking.
+1. On `/session/[id]?origin=queue`, opening two browser tabs as customer + listener shows messages appearing in realtime via Supabase Realtime (no page refresh).
+2. A `sessions` row is created (`status = active`, `started_at` set) when opened; its linked queue entry flips to `connected`.
+3. Only the two participants can read/send messages (postgres RLS); guests/non-participants get 403.
+4. Clicking "Leave" sets the session to `left` and a system chip appears on the other side; "End Session" sets `ended` and disables the input.
+5. Voice (phone mode) still needs Twilio credentials — 🔴 client-blocked (see Module 6 client checklist).
 
 ---
 
@@ -515,12 +515,13 @@ This section captures decisions that span multiple modules. Revisit as you build
 The queue join payment **reuses the same Stripe account** as Modules 1/4 (no new provider). The $1 minimum charge flows through the same Stripe PaymentIntent → dashboard → webhooks. Once the client enables **Module 4 Stripe keys + webhook endpoint + payment methods**, queue payments work automatically. — ⬜ (reuses Stripe above)
 
 ### Module 6 — Realtime Voice & Chat
+**Realtime text chat is FULLY BUILT** (Supabase Realtime — no client action needed). Only **voice** (phone mode) is blocked:
 
 | # | Item needed from client | What it's for | Env var / where | Status |
 |---|------------------------|---------------|-----------------|--------|
-| 1 | **Twilio account + credentials** (Account SID + Auth Token) | SMS + phone calls for the conversation/session layer | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | ⬜ |
+| 1 | **Twilio account + credentials** (Account SID + Auth Token) | Voice calls for the conversation/session layer | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | ⬜ |
 | 2 | **Twilio phone number(s) + verified caller ID** | Place/receive calls for listeners/sessions | Twilio console; `TWILIO_PHONE_NUMBER` | ⬜ |
-| 3 | **Twilio (or LiveKit) — decide voice provider** | Voice calls; realtime chat will use Supabase Realtime | SweetJS confirmation in Cross-Module notes | ⬜ |
+| 3 | **Twilio (or LiveKit) — decide voice provider** | Voice calls; realtime text chat uses Supabase Realtime | SweetJS confirmation in Cross-Module notes | ⬜ |
 
 ### Module 8 — Session & Call Management
 - (reminders / emails reuse Resend + Twilio above; SMS reminders need a Twilio SMS-capable number) — ⬜ / 🟡

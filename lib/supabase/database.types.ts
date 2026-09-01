@@ -117,6 +117,45 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          sender_id: string
+          session_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          sender_id: string
+          session_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_cents: number
@@ -318,6 +357,83 @@ export type Database = {
           },
         ]
       }
+      sessions: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          ended_at: string | null
+          id: string
+          listener_id: string
+          mode: Database["public"]["Enums"]["session_mode"]
+          notes: string | null
+          queue_entry_id: string | null
+          room_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["session_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          listener_id: string
+          mode?: Database["public"]["Enums"]["session_mode"]
+          notes?: string | null
+          queue_entry_id?: string | null
+          room_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["session_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          listener_id?: string
+          mode?: Database["public"]["Enums"]["session_mode"]
+          notes?: string | null
+          queue_entry_id?: string | null
+          room_id?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["session_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_listener_id_fkey"
+            columns: ["listener_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_queue_entry_id_fkey"
+            columns: ["queue_entry_id"]
+            isOneToOne: false
+            referencedRelation: "queue_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -350,6 +466,13 @@ export type Database = {
         | "assigned"
         | "connected"
         | "left"
+        | "completed"
+      session_mode: "chat" | "phone"
+      session_status:
+        | "pending"
+        | "active"
+        | "left"
+        | "ended"
         | "completed"
       user_role: "customer" | "listener" | "admin" | "super_admin"
     }
@@ -494,6 +617,8 @@ export const Constants = {
       ],
       payment_type: ["booking", "donation", "queue"],
       queue_status: ["waiting", "assigned", "connected", "left", "completed"],
+      session_mode: ["chat", "phone"],
+      session_status: ["pending", "active", "left", "ended", "completed"],
       user_role: ["customer", "listener", "admin", "super_admin"],
     },
   },

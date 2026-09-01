@@ -1,0 +1,352 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  Loader2,
+  Send,
+  Phone,
+  MessageSquare,
+  UserPlus,
+  UserMinus,
+  LogOut,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/supabase/database.types";
+
+type SessionRow = Database["public"]["Tables"]["sessions"]["Row"];
+type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
+
+type Props = {
+  origin: "queue" | "booking";
+  refId: string;
+};
+
+type UiMessage = {
+  id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  kind: "message" | "system";
+};
+
+export function SessionRoom({ origin, refId }: Props) {
+  const supabase = createClient();
+  const [session, setSession] = useState<SessionRow | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [uid, setUid] = useState<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const joinedRef = useRef(false);
+  const channelRef = useRef<
+    (ReturnType<typeof supabase.channel> | undefined)[]
+  >([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let msgChannel: ReturnType<typeof supabase.channel> | undefined;
+    let statusChannel: ReturnType<typeof supabase.channel> | undefined;
+
+    async function open() {
+      if (joinedRef.current) return;
+      joinedRef.current = true;
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Please log in to join the session.");
+        setLoading(false);
+        return;
+      }
+      setUid(user.id);
+
+      let res: Response;
+      try {
+        res = await fetch("/api/session/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            origin === "queue"
+              ? { queue_entry_id: refId }
+              : { booking_id: refId },
+          ),
+        });
+      } catch {
+        if (!cancelled) {
+          toast.error("Couldn't open the session.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (!cancelled) {
+          toast.error(data.error || "Couldn't open the session.");
+          setLoading(false);
+        }
+        return;
+      }
+
+      const sess = data.session as SessionRow;
+      if (cancelled) return;
+      setSession(sess);
+      setLoading(false);
+
+      // Load message history.
+      const { data: history } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("session_id", sess.id)
+        .order("created_at", { ascending: true });
+      if (!cancelled && history) {
+        setMessages(
+          history.map((m) => ({ ...m, kind: "message" as const })),
+        );
+      }
+
+      // Live messages.
+      const msgChannel = supabase
+        .channel(`session-msgs-${sess.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `session_id=eq.${sess.id}`,
+          },
+          (payload) => {
+            const row = payload.new as MessageRow;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === row.id)) return prev;
+              return [...prev, { ...row, kind: "message" as const }];
+            });
+            if (row.sender_id === user.id) {
+              setDraft("");
+            }
+          },
+        )
+        .subscribe();
+
+      // Live session status (joined/left/ended).
+      const statusChannel = supabase
+        .channel(`session-status-${sess.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "sessions",
+            filter: `id=eq.${sess.id}`,
+          },
+          (payload) => {
+            const next = payload.new as SessionRow;
+            const prev = payload.old as SessionRow;
+            setSession(next);
+            if (prev?.status === "active" && next.status === "left") {
+              setMessages((m) => [
+                ...m,
+                {
+                  id: `sys-left-${Date.now()}`,
+                  sender_id: "system",
+                  body:
+                    next.listener_id === user.id
+                      ? "You left the session."
+                      : "The other participant left. They can rejoin anytime.",
+                  created_at: new Date().toISOString(),
+                  kind: "system",
+                },
+              ]);
+            }
+          },
+        )
+        .subscribe();
+
+      channelRef.current.push(msgChannel, statusChannel);
+    }
+
+    open();
+    return () => {
+      cancelled = true;
+      channelRef.current.forEach((c) => {
+        if (c) supabase.removeChannel(c);
+      });
+      channelRef.current = [];
+    };
+  }, [origin, refId, supabase]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleSend(e: React.FormEvent) {
+    e.preventDefault();
+    const body = draft.trim();
+    if (!body || !session || !uid) return;
+
+    const { error } = await supabase.from("messages").insert({
+      session_id: session.id,
+      sender_id: uid,
+      body,
+    });
+    if (error) {
+      toast.error("Couldn't send the message.");
+      return;
+    }
+    setDraft("");
+  }
+
+  async function handleMarkLeft() {
+    if (!session) return;
+    const { error } = await supabase
+      .from("sessions")
+      .update({ status: "left" })
+      .eq("id", session.id)
+      .eq("status", "active");
+    if (error) toast.error("Couldn't update the session.");
+  }
+
+  async function handleEnd() {
+    if (!session) return;
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("sessions")
+      .update({ status: "ended", ended_at: now })
+      .eq("id", session.id)
+      .in("status", ["active", "left"]);
+    if (error) toast.error("Couldn't end the session.");
+  }
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Opening your session…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!session) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-muted-foreground">
+          This session isn&apos;t available to you right now.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const isOver = session.status === "ended" || session.status === "completed";
+
+  return (
+    <Card className="flex h-[calc(100vh-12rem)] flex-col">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 border-b">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            {session.mode === "phone" ? (
+              <Phone className="h-5 w-5" />
+            ) : (
+              <MessageSquare className="h-5 w-5" />
+            )}
+          </div>
+          <div>
+            <CardTitle className="text-base">Live Session</CardTitle>
+            <p className="text-xs text-muted-foreground capitalize">
+              {session.mode} · {session.status}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleMarkLeft}
+            disabled={isOver || session.status !== "active"}
+          >
+            <UserMinus className="mr-2 h-4 w-4" />
+            Leave
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleEnd}
+            disabled={isOver}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            End Session
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <UserPlus className="h-4 w-4 text-primary" />
+          {session.mode === "phone"
+            ? "Voice calls connect via the listener dialer (Twilio — client setup pending)."
+            : "Chat is live — messages appear in real time for both of you."}
+        </div>
+
+        {messages.map((m) =>
+          m.kind === "system" ? (
+            <div
+              key={m.id}
+              className="self-center rounded-full bg-muted px-4 py-1 text-xs text-muted-foreground"
+            >
+              {m.body}
+            </div>
+          ) : (
+            <div
+              key={m.id}
+              className={`flex max-w-[75%] flex-col gap-1 ${
+                m.sender_id === uid ? "self-end items-end" : "self-start items-start"
+              }`}
+            >
+              <div
+                className={`rounded-2xl px-4 py-2 text-sm ${
+                  m.sender_id === uid
+                    ? "bg-primary text-primary-foreground rounded-br-sm"
+                    : "bg-muted text-foreground rounded-bl-sm"
+                }`}
+              >
+                {m.body}
+              </div>
+              <span className="px-1 text-[10px] text-muted-foreground">
+                {new Date(m.created_at).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          ),
+        )}
+        <div ref={bottomRef} />
+      </CardContent>
+
+      {!isOver && (
+        <form
+          onSubmit={handleSend}
+          className="flex items-center gap-2 border-t p-3"
+        >
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Type a message…"
+            className="flex-1"
+            autoFocus
+          />
+          <Button type="submit" size="icon" disabled={!draft.trim()}>
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+      )}
+    </Card>
+  );
+}

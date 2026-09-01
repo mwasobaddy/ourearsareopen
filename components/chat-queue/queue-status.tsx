@@ -139,9 +139,18 @@ export function QueueStatus({ paymentId }: Props) {
               You&apos;ve been matched!
             </h3>
             <p className="max-w-md text-muted-foreground">
-              A listener is available. Stay on this page — the chat will open
-              here shortly.
+              A listener is available. Open the chat to start your
+              conversation.
             </p>
+            <Button asChild className="mt-2">
+              <a
+                href={`/session/${entry.id}?origin=queue`}
+                className="inline-flex items-center gap-2"
+              >
+                <MessageSquare className="h-4 w-4" />
+                Open Chat
+              </a>
+            </Button>
           </>
         ) : (
           <>
