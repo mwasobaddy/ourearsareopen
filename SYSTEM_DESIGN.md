@@ -471,3 +471,69 @@ This section captures decisions that span multiple modules. Revisit as you build
 
 ### Open Cross-Cutting Questions
 - (none yet)
+
+---
+
+## 👉 Client Action Required — Launch Checklist
+
+> **Purpose:** A single, consolidated list of every external credential / account / toggle the **client** must provide before or at launch. Populated module-by-module as each build step hits a dependency that lives on the client's side (not the developer's). When all modules are done, this whole section is sent to the client as an onboarding email.
+>
+> **How to update:** As you build each module, drop any item that requires client credentials/accounts into the matching subsection below, with the exact name of the `.env.local` variable(s) it maps to and a short "why" note. Leave the "Module built?" mark blank until the module is fully live-tested against real credentials.
+
+### Status legend
+- `⬜ Not started` — module still to be built / item not yet reachable
+- `🟡 Needs client input` — code is done but blocked on a client-provided credential/toggle
+- `🟢 Ready` — client has provided this and it is verified live
+
+---
+
+### Module 1 — Auth & Users
+
+| # | Item needed from client | What it's for | Env var / where | Status |
+|---|------------------------|---------------|-----------------|--------|
+| 1 | **Supabase project** (already provided — `cxwrvstojafdjqvelbno`) | Hosting the database, auth, storage, realtime | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | 🟢 |
+| 2 | **Enable "Confirm email"** in Supabase Auth → Providers → Email | Forces new users to verify their email address before signing in | Supabase dashboard (Authentication → Providers → Email → Confirm email) | 🟡 |
+| 3 | **Resend API key + verified sending domain** | Sends verification / password-reset emails | `RESEND_API_KEY` + a domain verified in Resend | 🟡 |
+| 4 | **Google OAuth credentials** (OAuth client ID + secret, authorized redirect URIs) | "Continue with Google" login button | Supabase dashboard (Authentication → Providers → Google) | 🟡 |
+| 5 | **Apple OAuth credentials** (Service ID, Team ID, Key ID + private key, domain) | "Continue with Apple" login button | Supabase dashboard (Authentication → Providers → Apple) | 🟡 |
+
+### Module 4 — Payments (Stripe)
+
+| # | Item needed from client | What it's for | Env var / where | Status |
+|---|------------------------|---------------|-----------------|--------|
+| 1 | **Stripe API keys (SECRET + PUBLISHABLE) — test mode first, then live** | Create PaymentIntents; the app never holds card data | `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | 🟡 |
+| 2 | **Stripe Webhook signing secret** | Verify Stripe webhook events (`payment_intent.succeeded`, etc.) before confirming bookings | `STRIPE_WEBHOOK_SECRET` | 🟡 |
+| 3 | **Register the Stripe webhook endpoint** | Stripe must call `POST /api/webhooks/stripe` (your deployed URL) with the events above | Stripe dashboard (Developers → Webhooks) | 🟡 |
+| 4 | **Enable the payment methods** you want to accept on this merchant account | Card (required); optionally Link, Apple Pay, Google Pay, Klarna, PayPal via Stripe (NOT separate PayPal) | Stripe dashboard (Settings → Payment methods) | 🟡 |
+| 5 | **Optional: custom recurring-donation price** | Powers the "Monthly" donate tab + Stripe Subscriptions/Checkout (deferred feature) | Stripe dashboard (Products/Prices) | ⬜ |
+
+> ℹ️ **Note on PayPal:** The platform accepts PayPal **through Stripe** (`paypal` become a Stripe payment method). No separate PayPal developer account/API keys are needed. If the client wants standalone PayPal buttons (old design), that is a separate integration — flag it.
+
+### Module 5 — Open Chat Queue (not yet reached)
+<!-- add client credentials for queue payments (reuses Stripe) + any queue-specific service here when Module 5 is built -->
+
+### Module 6 — Realtime Voice & Chat
+
+| # | Item needed from client | What it's for | Env var / where | Status |
+|---|------------------------|---------------|-----------------|--------|
+| 1 | **Twilio account + credentials** (Account SID + Auth Token) | SMS + phone calls for the conversation/session layer | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | ⬜ |
+| 2 | **Twilio phone number(s) + verified caller ID** | Place/receive calls for listeners/sessions | Twilio console; `TWILIO_PHONE_NUMBER` | ⬜ |
+| 3 | **Twilio (or LiveKit) — decide voice provider** | Voice calls; realtime chat will use Supabase Realtime | SweetJS confirmation in Cross-Module notes | ⬜ |
+
+### Module 8 — Session & Call Management
+- (reminders / emails reuse Resend + Twilio above; SMS reminders need a Twilio SMS-capable number) — ⬜ / 🟡
+
+### Module 11 — Content, Email & Marketing Templates
+- (all transactional emails — booking confirm, reminders, synopsis, receipt — reuse **Resend** above) — ⬜
+
+### Global / Platform
+
+| # | Item needed from client | What it's for | Env var / where | Status |
+|---|------------------------|---------------|-----------------|--------|
+| 1 | **Production deploy target (Vercel recommended)** | Host the Next.js app + API routes; needs a domain | Vercel project + deploy domain | ⬜ |
+| 2 | **Custom domain (if any)** | Branded URLs for the app + Stripe webhook + email links | DNS records | ⬜ |
+| 3 | **Brand/legal** — Terms, Privacy, Cancellation Policy pages content, 501(c)(3) note | Site footer/legal copy already links these | Content files in the repo | ⬜ |
+
+---
+
+*Keep this list updated as modules are built. At launch, copy this entire "Client Action Required" section (with statuses flipped to actionable language) into the client email.*
