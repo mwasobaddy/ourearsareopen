@@ -9,6 +9,7 @@ import {
   Users,
   ScrollText,
   Bell,
+  Mail,
 } from "lucide-react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/dashboard/app-sidebar";
@@ -22,6 +23,7 @@ const superAdminNavItems = [
   { href: "/super-admin/users", label: "Users & Roles", icon: Users },
   { href: "/super-admin/audit", label: "Audit Log", icon: ScrollText },
   { href: "/super-admin/notifications", label: "Notifications", icon: Bell },
+  { href: "/super-admin/email-templates", label: "Email Templates", icon: Mail },
 ];
 
 export default function SuperAdminLayout({

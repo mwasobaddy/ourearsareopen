@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { site } from "@/lib/site";
+import { getActiveContentCrisis } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "Crisis Help | Our Ears Are Open",
@@ -21,57 +22,15 @@ export const metadata: Metadata = {
     "If you're in crisis, help is available. Find immediate support resources and crisis hotlines here.",
 };
 
-const crisisResources = [
-  {
-    name: "988 Suicide & Crisis Lifeline",
-    description: "Free, confidential support 24/7 for people in distress",
-    phone: "988",
-    availability: "24/7",
-    icon: Phone,
-    primary: true,
-  },
-  {
-    name: "Crisis Text Line",
-    description: "Text HOME to 741741 for free crisis support",
-    phone: "Text HOME to 741741",
-    availability: "24/7",
-    icon: MessageSquare,
-    primary: false,
-  },
-  {
-    name: "National Domestic Violence Hotline",
-    description: "Support for those affected by domestic violence",
-    phone: "1-800-799-7233",
-    availability: "24/7",
-    icon: Shield,
-    primary: false,
-  },
-  {
-    name: "Trevor Project (LGBTQ+ crisis support)",
-    description: "24/7 crisis support for LGBTQ+ individuals",
-    phone: "1-866-488-7386",
-    availability: "24/7",
-    icon: Heart,
-    primary: false,
-  },
-  {
-    name: "SAMHSA National Helpline",
-    description:
-      "Treatment referral service for mental health and substance use",
-    phone: "1-800-662-4357",
-    availability: "24/7",
-    icon: Globe,
-    primary: false,
-  },
-  {
-    name: "Veterans Crisis Line",
-    description: "Support for Veterans and their families",
-    phone: "988, then press 1",
-    availability: "24/7",
-    icon: Shield,
-    primary: false,
-  },
-];
+function iconFor(name: string, isPrimary: boolean) {
+  if (isPrimary) return Phone;
+  const n = name.toLowerCase();
+  if (n.includes("text")) return MessageSquare;
+  if (n.includes("veterans") || n.includes("domestic")) return Shield;
+  if (n.includes("lgbtq") || n.includes("trevor")) return Heart;
+  if (n.includes("samhsa")) return Globe;
+  return Phone;
+}
 
 const selfCareSteps = [
   {
@@ -100,7 +59,16 @@ const selfCareSteps = [
   },
 ];
 
-export default function CrisisPage() {
+export default async function CrisisPage() {
+  const crisisResources = (await getActiveContentCrisis()).map((r) => ({
+    name: r.name,
+    description: r.description ?? "",
+    phone: r.phone ?? "",
+    availability: r.availability ?? "",
+    primary: r.is_primary,
+    icon: iconFor(r.name, r.is_primary),
+  }));
+
   return (
     <>
       {/* Immediate Help Banner */}

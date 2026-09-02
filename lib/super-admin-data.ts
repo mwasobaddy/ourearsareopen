@@ -127,3 +127,27 @@ export async function writeAuditLog(input: {
     // audit logging is best-effort; never break the primary operation
   }
 }
+
+export type EmailTemplateRow = {
+  key: string;
+  subject: string;
+  body: string;
+  description: string | null;
+};
+
+/**
+ * All email templates, ordered by key. Super-admin only (RLS enforced).
+ */
+export async function getEmailTemplates(): Promise<EmailTemplateRow[]> {
+  try {
+    const admin = createAdminClient();
+    const { data } = await admin
+      .from("email_templates")
+      .select("key, subject, body, description")
+      .order("key", { ascending: true });
+    return data ?? [];
+  } catch {
+    return [];
+  }
+}
+

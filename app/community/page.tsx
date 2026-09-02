@@ -16,11 +16,13 @@ import {
   Rainbow,
   UserPlus,
   Trophy,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChatQueueWidget } from "@/components/community/chat-queue-widget";
+import { getActiveContentRooms } from "@/lib/content";
 
 export const metadata: Metadata = {
   title: "Community | Our Ears Are Open",
@@ -28,96 +30,32 @@ export const metadata: Metadata = {
     "Join a community to share your losses and wins. Create your own community, celebrate milestones — no judgment, just community. 18+ only.",
 };
 
-const rooms = [
-  {
-    id: "wins",
+const ICON_MAP: Record<string, { icon: typeof Heart; className: string }> = {
+  trophy: {
     icon: Trophy,
-    title: "Wins & Milestones",
-    description: "Share your achievements — big or small. A space to celebrate and be celebrated.",
-    members: 94,
-    activeNow: 12,
-    recentTopic: "First week of a new habit",
-    colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-    borderClass: "hover:border-amber-400/40",
+    className: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
   },
-  {
-    id: "general",
-    icon: MessagesSquare,
-    title: "General Chat",
-    description: "Just want to talk? No topic needed — jump in and connect.",
-    members: 203,
-    activeNow: 22,
-    recentTopic: "What made you smile today?",
-    colorClass: "bg-muted text-muted-foreground",
-    borderClass: "hover:border-muted-foreground/30",
-  },
-  {
-    id: "anxiety",
-    icon: Brain,
-    title: "Anxiety & Stress",
-    description: "Talk through daily stress, worry, and anxiety with people who truly get it.",
-    members: 124,
-    activeNow: 8,
-    recentTopic: "Managing work stress",
-    colorClass: "bg-primary/10 text-primary",
-    borderClass: "hover:border-primary/40",
-  },
-  {
-    id: "depression",
-    icon: Heart,
-    title: "Depression Support",
-    description: "A safe, judgment-free space for those navigating heavy days.",
-    members: 98,
-    activeNow: 5,
-    recentTopic: "Finding small wins",
-    colorClass: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-    borderClass: "hover:border-blue-400/40",
-  },
-  {
-    id: "relationships",
-    icon: Users,
-    title: "Relationships",
-    description: "Couples, family dynamics, friendships — all conversations welcome.",
-    members: 87,
-    activeNow: 11,
-    recentTopic: "Communication with a partner",
-    colorClass: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-    borderClass: "hover:border-emerald-400/40",
-  },
-  {
-    id: "grief",
-    icon: CloudRain,
-    title: "Grief & Loss",
-    description: "You don't have to grieve alone. Share memories, find comfort.",
-    members: 52,
-    activeNow: 3,
-    recentTopic: "Grieving a parent",
-    colorClass: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
-    borderClass: "hover:border-slate-400/40",
-  },
-  {
-    id: "self-improvement",
-    icon: TrendingUp,
-    title: "Self-Improvement",
-    description: "Goals, habits, self-care, and personal growth conversations.",
-    members: 113,
-    activeNow: 14,
-    recentTopic: "Building a morning routine",
-    colorClass: "bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
-    borderClass: "hover:border-emerald-500/40",
-  },
-  {
-    id: "lgbtq",
-    icon: Rainbow,
-    title: "LGBTQ+ Safe Space",
-    description: "An inclusive, affirming space for the LGBTQ+ community.",
-    members: 76,
-    activeNow: 7,
-    recentTopic: "Coming out experiences",
-    colorClass: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
-    borderClass: "hover:border-purple-400/40",
-  },
-];
+  "messages-square": { icon: MessagesSquare, className: "bg-muted text-muted-foreground" },
+  brain: { icon: Brain, className: "bg-primary/10 text-primary" },
+  heart: { icon: Heart, className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+  users: { icon: Users, className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  "cloud-rain": { icon: CloudRain, className: "bg-slate-500/10 text-slate-600 dark:text-slate-400" },
+  "trending-up": { icon: TrendingUp, className: "bg-emerald-600/10 text-emerald-700 dark:text-emerald-400" },
+  rainbow: { icon: Rainbow, className: "bg-purple-500/10 text-purple-600 dark:text-purple-400" },
+  smile: { icon: Smile, className: "bg-amber-500/10 text-amber-600 dark:text-amber-400" },
+  star: { icon: Star, className: "bg-primary/10 text-primary" },
+};
+
+const DEFAULT_ROOM_META: Record<string, { members: number; activeNow: number; recentTopic: string }> = {
+  wins: { members: 94, activeNow: 12, recentTopic: "First week of a new habit" },
+  general: { members: 203, activeNow: 22, recentTopic: "What made you smile today?" },
+  anxiety: { members: 124, activeNow: 8, recentTopic: "Managing work stress" },
+  depression: { members: 98, activeNow: 5, recentTopic: "Finding small wins" },
+  relationships: { members: 87, activeNow: 11, recentTopic: "Communication with a partner" },
+  grief: { members: 52, activeNow: 3, recentTopic: "Grieving a parent" },
+  "self-improvement": { members: 113, activeNow: 14, recentTopic: "Building a morning routine" },
+  lgbtq: { members: 76, activeNow: 7, recentTopic: "Coming out experiences" },
+};
 
 const recentActivity = [
   {
@@ -175,7 +113,29 @@ const guidelines = [
   },
 ];
 
-export default function CommunityPage() {
+export default async function CommunityPage() {
+  const dbRooms = await getActiveContentRooms();
+  const rooms = dbRooms.map((room) => {
+    const meta = DEFAULT_ROOM_META[room.slug] ?? {
+      members: 0,
+      activeNow: 0,
+      recentTopic: "Join the conversation",
+    };
+    const visual = ICON_MAP[room.icon] ?? ICON_MAP["messages-square"];
+    return {
+      id: room.slug,
+      icon: visual.icon,
+      title: room.title,
+      description: room.description ?? "",
+      members: meta.members,
+      activeNow: meta.activeNow,
+      recentTopic: meta.recentTopic,
+      colorClass: visual.className,
+      borderClass: "hover:border-primary/40",
+    };
+  });
+  const totalActive = rooms.reduce((acc, r) => acc + r.activeNow, 0);
+
   return (
     <>
       {/* Hero Section */}
@@ -203,7 +163,7 @@ export default function CommunityPage() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
                 </span>
-                {rooms.reduce((acc, r) => acc + r.activeNow, 0)} people active right now
+                {totalActive} people active right now
               </div>
               <span className="inline-flex items-center rounded-full border border-amber-400/50 bg-amber-500/20 px-4 py-2 text-sm font-medium text-white backdrop-blur-md">
                 18+ only — legal minimum age

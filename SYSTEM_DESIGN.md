@@ -369,7 +369,7 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 
 ## Module 9: Admin Interface
 
-**Status:** 🟡 (core admin portal real; community-rooms content deferred; Stripe refunds + listener auth provisioning client-blocked)
+**Status:** 🟡 (core admin portal real; Stripe refunds + listener auth provisioning client-blocked)
 
 Operations portal: listener management, session oversight, reports, content, refunds/support.
 
@@ -384,7 +384,7 @@ Operations portal: listener management, session oversight, reports, content, ref
 - [x] Refunds + support: `support_tickets` table (refund/support, status, internal notes) + create/resolve via API
 - [x] `is_active` column + `support_tickets` table (migration `0014`) + RLS (admins only)
 - [~] Listener provisioning (auth user + first-login password) — blocked until client enables Supabase password auth + email
-- [~] Content: community rooms — no rooms feature in current build; site-wide content moves to Module 10 (org_config)
+- [x] Content: `content_rooms` + `content_crisis` tables with admin editors — delivered in **Module 11** (`/admin/content`), site-wide copy via Module 10 `org_config`
 - [ ] Email tools (verify on signup, post-session synopsis, receipts) — blocked until Resend (see client checklist)
 
 ### Questions
@@ -399,7 +399,7 @@ Operations portal: listener management, session oversight, reports, content, ref
 6. `/admin/users` — real consumers; search by name/email; view profile; deactivate/reinstate.
 7. `/admin/reports` — sessions, revenue, new customers, utilization computed live from real data.
 8. `/admin/support` — create a refund/support ticket (persists to `support_tickets`); resolve/reopen works.
-9. Blocked items: Stripe refund issuance (needs Stripe keys), listener auth user (needs Supabase password/email), community-rooms content (no feature).
+9. Blocked items: Stripe refund issuance (needs Stripe keys), listener auth user (needs Supabase password/email). Community-rooms content is now served by **Module 11** (`/admin/content` → `/community` / `/crisis`).
 
 ---
 
@@ -436,31 +436,30 @@ Platform ownership: org config, feature flags, Stripe/billing config, role assig
 
 ## Module 11: Content & Marketing
 
-**Status:** ⚪
+**Status:** 🟡 (content management real end-to-end; **email delivery** blocked until client supplies Resend credentials)
 
-Community rooms, crisis content, and the full email system.
+Community rooms, crisis content, and the email system. Content management is fully wired; email templates are authorable but sending/delegation is client-blocked.
 
 ### TO-DO
-- [ ] `content_rooms` table + API + admin editing
-- [ ] `content_crisis` table + API + admin editing
-- [ ] Email templates (booking confirm, reminder, password reset, receipt)
-- [ ] Free signup → verification email with button redirect
-- [ ] Post session → synopsis email
-- [ ] Paid follow-up → payment link email
-- [ ] Receipt on any payment
-- [ ] Send emails to team members / consumers (ongoing)
+- [x] `content_rooms` table + API + admin editing (migration `0016`) — public read / admin write (RLS via `is_admin()`)
+- [x] `content_crisis` table + API + admin editing (migration `0016`) — public read / admin write
+- [x] `/admin/content` real-data editor for both rooms + crisis resources (create/edit/delete, toggle active, sort; audit-logged)
+- [x] `/community` reads active rooms from `content_rooms` (icon map + default member/active/recent metadata; falls back gracefully if empty)
+- [x] `/crisis` reads active resources from `content_crisis` (phone/availability/primary rendering)
+- [x] `email_templates` table + seed (welcome, booking confirm, reminder, receipt, synopsis) — migration `0016`, super-admin editable
+- [x] `/super-admin/email-templates` editor (subject/body/description; placeholders documented) — ready for when Resend is configured
+- [ ] Email delivery (Resend) — verification email, synopsis email, payment-link email, receipts, reminders — **blocked until client provides Resend API keys + from-address**
 - [ ] In-app notification center (optional)
 
 ### Questions
 - (none yet)
 
 ### How to test — Module 11
-Fill in as Module 11 is built. Expected checklist:
-1. Community room titles/descriptions/order editable by admin and reflected on the public community page.
-2. Crisis content editable and displayed correctly.
-3. New free signup triggers a verification email with a working button redirect *(Blocked until Resend configured)*.
-4. Booking confirmed → confirmation email; paid follow-up → payment link; any payment → receipt; post-session → synopsis email *(all Blocked until Resend configured)*.
-5. Emails to team members/consumers send with correct templates (ongoing).
+1. Log in as an `admin` (or `super_admin`) and open `/admin/content` — edit a community room title/description, change its sort order, and (de)activate it; the public `/community` page reflects the change immediately (inactive rooms are hidden).
+2. `/admin/content` crisis section — edit a hotline's name/phone/availability or mark it primary; the public `/crisis` page updates (inactive resources hidden).
+3. Create a new room or crisis resource; it appears in the admin list and on the public page. Delete one and it disappears.
+4. Log in as a `super_admin` and open `/super-admin/email-templates` — author subject/body copy for each transactional template (saved to `email_templates`).
+5. Email *delivery* (verification, confirmations, receipts, synopsis, reminders) is **not live** — it requires client-provided Resend API keys + sender address (see launch checklist).
 
 ---
 
@@ -551,7 +550,9 @@ Most of the super-admin portal is REAL and needs no client action (role-guarded 
 - **System notifications (email/SMS)** — the page is informational; actually sending needs **Resend** (Module 1) and **Twilio** (Module 6) — 🟡
 
 ### Module 11 — Content, Email & Marketing Templates
-- (all transactional emails — booking confirm, reminders, synopsis, receipt — reuse **Resend** above) — ⬜
+Community rooms + crisis content management is REAL and needs no client action (admin-editable via `/admin/content`, shown live on `/community` and `/crisis`). Email **templates** are authorable by super-admin (module 11 section, `/super-admin/email-templates`). What's left is delivery, which all reuses **Resend** (Module 1):
+- **Resend API key + sender email** — enables verification email, booking confirmations, reminders, receipts, session synopsis (templates are ready; sending is wired to send once the key is provided) — ⬜
+- **In-app notification center** — optional; not started — ⬜
 
 ### Global / Platform
 
