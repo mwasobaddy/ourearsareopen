@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  pauseListenerQueue,
+  createNotification,
+} from "@/lib/session-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +78,21 @@ export async function POST(
       .single();
     if (!docError && doc) document = doc;
   }
+
+  // Enforced debrief time: completing a session pauses the listener's queue
+  // availability so they take a breather before hearing someone new.
+  await pauseListenerQueue(session.listener_id);
+
+  // Notify the customer that their session is complete.
+  await createNotification({
+    userId: session.user_id,
+    type: "session_complete",
+    title: "Session completed",
+    body: session.notes
+      ? "Your session has been completed and your listener shared notes with you."
+      : "Your session has been completed. Thank you for trusting us.",
+    link: "/profile",
+  });
 
   return NextResponse.json({ session: updated, document });
 }

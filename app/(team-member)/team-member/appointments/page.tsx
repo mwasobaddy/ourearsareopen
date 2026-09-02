@@ -1,23 +1,51 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Calendar, Phone, MessageSquare } from "lucide-react";
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = {
   title: "Appointments | Team Member Portal",
-  description: "Your upcoming appointments.",
+  description: "Your scheduled phone and chat sessions.",
 };
 
-// Mock data
-const upcomingAppointments = [
-  { id: "1", consumer: "Alex M.", type: "Phone", date: "Today", time: "2:00 PM" },
-  { id: "2", consumer: "Jordan D.", type: "Chat", date: "Today", time: "4:30 PM" },
-  { id: "3", consumer: "Sam K.", type: "Phone", date: "Tomorrow", time: "10:00 AM" },
-];
+export default async function TeamMemberAppointmentsPage() {
+  const userClient = await createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await userClient.auth.getUser();
 
-export default function TeamMemberAppointmentsPage() {
+  if (userError || !user) {
+    redirect("/login");
+  }
+
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!profile || profile.role !== "listener") {
+    redirect("/");
+  }
+
+  const nowIso = new Date().toISOString();
+  const { data: appointments } = await admin
+    .from("bookings")
+    .select(
+      "id, type, slot_start, slot_end, status, profiles:user_id(full_name)",
+    )
+    .eq("listener_id", user.id)
+    .in("status", ["pending", "confirmed"])
+    .gte("slot_start", nowIso)
+    .order("slot_start", { ascending: true });
+
   return (
     <div className="space-y-8">
       <div>
@@ -40,38 +68,53 @@ export default function TeamMemberAppointmentsPage() {
           </Link>
         </CardHeader>
         <CardContent>
-          {upcomingAppointments.length > 0 ? (
+          {appointments && appointments.length > 0 ? (
             <ul className="space-y-4">
-              {upcomingAppointments.map((apt) => (
-                <li
-                  key={apt.id}
-                  className="flex items-center justify-between rounded-lg border border-border p-4"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                      {apt.type === "Phone" ? (
-                        <Phone className="h-5 w-5 text-primary" />
-                      ) : (
-                        <MessageSquare className="h-5 w-5 text-primary" />
-                      )}
+              {appointments.map((apt) => {
+                const customer = Array.isArray(apt.profiles)
+                  ? apt.profiles[0]
+                  : apt.profiles;
+                return (
+                  <li
+                    key={apt.id}
+                    className="flex items-center justify-between rounded-lg border border-border p-4"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+                        {apt.type === "phone" ? (
+                          <Phone className="h-5 w-5 text-primary" />
+                        ) : (
+                          <MessageSquare className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium">
+                          {customer?.full_name ?? "Consumer"}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {apt.slot_start
+                            ? new Date(apt.slot_start).toLocaleString([], {
+                                weekday: "short",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "Time to be confirmed"}
+                        </p>
+                        <Badge variant="secondary" className="mt-1 capitalize">
+                          {apt.type}
+                        </Badge>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium">{apt.consumer}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {apt.date} at {apt.time}
-                      </p>
-                      <Badge variant="secondary" className="mt-1">
-                        {apt.type}
-                      </Badge>
-                    </div>
-                  </div>
-                  <Button size="sm" asChild>
-                    <Link href={`/session/${apt.id}`}>
-                      {apt.type === "Phone" ? "Start Call" : "Open Chat"}
-                    </Link>
-                  </Button>
-                </li>
-              ))}
+                    <Button size="sm" asChild>
+                      <Link href={`/session/${apt.id}?origin=booking`}>
+                        {apt.type === "phone" ? "Start Call" : "Open Chat"}
+                      </Link>
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
           ) : (
             <div className="py-12 text-center text-muted-foreground">

@@ -117,7 +117,7 @@ Completes the user's profile after signup (the `/profile/setup` wizard), persona
 - [x] Completion guard helper `lib/require-profile.ts` (redirects incomplete profiles to `/profile/setup`) — ready to apply to booking routes
 - [x] Fixed infinite-recursion in `admins_read_all_profiles` via `is_admin()` SECURITY DEFINER helper (migration `0005`)
 - [x] End-to-end verified: signup trigger → profile read → full update → avatar upload → delete account (via admin-created confirmed test user)
-- [ ] Assigned listener link UI (customer ↔ listener) — column exists; UI deferred until listener profiles (Module 3+/admin) exist
+- [x] Assigned listener UI — the profile "Personal Information" tab shows the customer's assigned listener name when one is set (`profiles.assigned_listener_id`)
 - [ ] `isProfileComplete` client-side shortcut / booking-route guard wiring (deferred to Module 3)
 
 ### Questions
@@ -162,8 +162,9 @@ The book-listener multi-step flow: choose phone/chat type, concern, listener pre
 - [x] Booking page server-guarded: incomplete profile → redirect to `/profile/setup?next=/book-listener`
 - [x] List upcoming + past bookings on `/profile` Conversations tab (real data) with Cancel action
 - [x] End-to-end verified: create booking → list → cancel → RLS isolation → availability slots (via confirmed test user; cleaned up)
+- [x] Reschedule booking — `PATCH /api/bookings/[id]` + `GET /api/bookings/[id]/reschedule-options` + Reschedule button/dialog on the profile Conversations tab (frees old slot, claims a new one)
+- [x] Feature-flag wiring — the booking flow honors `free_booking` (hides the "Free option") and `scheduled_phone` (hides the Phone conversation type) from `feature_flags`
 - [ ] Booking hold / time-lock while paying (needs payment timing from Module 4)
-- [ ] Reschedule booking UI
 - [ ] Booking confirmations via email *(Blocked until Resend configured)*
 
 ### Questions
@@ -248,7 +249,8 @@ Users pay minimum ($1) to join a live queue; the next available listener is assi
 - [x] `app/api/stripe/payment-intent/route.ts` widened to `type: "queue"` (min $1)
 - [x] Rewritten queue payment form (`chat-queue-donation-form.tsx`) → PaymentIntent → `PaymentForm` → `/chat-queue/success?payment=`
 - [ ] "Listeners available now" stat for widget
-- [ ] Leave queue + optional refund
+- [x] `app/api/queue/leave/route.ts` — mark my waiting/assigned entry `left`, free position; **Leave-queue** button in `QueueStatus`
+- [ ] Refund on leave / after abandonment policy
 - [ ] RLS: listeners see waiting pool; admins see all (customer sees own entry — done)
 
 ### Questions
@@ -296,7 +298,7 @@ In-session chat (real-time text) and voice calls (phone appointments). Voice via
 
 ## Module 7: Listener Dashboard & Availability
 
-**Status:** 🟡 (core portal made real: queue toggle/pool/accept, availability, hours, consumer profile; remaining items build on Twilio + admin listener-provisioning)
+**Status:** 🟡 (core portal real: queue, availability, hours, consumer profiles, 15hr enforcement, no-show; remaining items build on Twilio + admin listener-provisioning)
 
 The `/team-member` / workforce portal. Listener login (admin-created username + first-login password), availability, queue toggle, consumer profiles, hours tracking (15hr/week cap). Listeners are modeled as `profiles.role = 'listener'` (existing `is_listener()` helper) rather than a separate table.
 
@@ -309,13 +311,14 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 - [x] `GET /api/queue/customer/[id]` — listener views a consumer's profile/signup answers before a session (gated to consumers in the listener's care; email/phone withheld)
 - [x] `/team-member/queue` real — availability toggle + real waiting pool + Accept (opens `/session/<entry>?origin=queue`) + consumer profile dialog
 - [x] `/team-member/availability` real — load/save weekly schedule
-- [x] `/team-member/dashboard` real — weekly/monthly hours computed from `sessions` (ended_at − started_at), 15hr cap progress, today's confirmed appointments with Open Chat/Start Call
+- [x] `/team-member/dashboard` real — weekly/monthly hours computed from `sessions` (ended_at − started_at), 15hr cap progress, today's confirmed appointments with Open Chat/Start Call; **Mark No-show** action
+- [x] `/team-member/appointments` — wired to real `bookings` (upcoming scheduled appointments for the listener), replacing the mock list
+- [x] **Enforce 15hr/week cap** — blocks `queue/toggle`, `queue/accept`, and `session/open` for listeners at scale when the week's session hours reach the cap
+- [x] **Safety disconnect button (with reason)** — `POST /api/session/[id]/end` writes `sessions.end_reason` + sets `ended` (end-reason dialog in `SessionRoom`)
+- [x] **14-minute warning + auto-end at 15 min + 5-min manual extend** — live countdown in `SessionRoom`
+- [x] **Debrief time** — completing a session pauses the listener's queue availability so they take a breather (re-enable manually)
 - [ ] Listener accounts: admin creates username; listener sets password on first login
 - [ ] Listener-only login + redirect to team portal
-- [ ] Safety disconnect button (with reason)
-- [ ] Enforce 15hr/week cap (block further sessions) — tracking done, enforcement pending
-- [ ] 14-minute warning before auto-end; extend by 5–10 min
-- [ ] No auto-pop next session; debrief time required
 - [ ] In-session follow-up booking; if paid → email payment link to consumer (listener never sees payment)
 - [ ] Start **voice** session from dashboard — 🔴 blocked (Twilio)
 
@@ -328,13 +331,14 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 3. The consumer profile dialog shows age range, pronouns, country, reason, prior therapy, relationship status, consent.
 4. `/team-member/availability` loads and saves the weekly schedule to `profiles.availability`.
 5. `/team-member/dashboard` shows weekly/monthly hours computed from the listener's completed sessions, the 15 hr/week capacity bar, and today's confirmed appointments with Open Chat/Start Call.
-6. Remaining items (listener provisioning via username+first-login password, safety-disconnect with reason, hard 15hr enforcement, 14-min warning/extension, follow-up booking payment link, voice) are pending; voice additionally needs Twilio creds.
+6. The 15 hr/week cap is now **enforced** in `queue/toggle`, `queue/accept`, and `session/open` (blocked with a clear message near the cap). Completing a session pauses the listener's queue availability (debrief pause); they re-enable it manually.
+7. Remaining items (listener provisioning via username+first-login password, in-session follow-up/paid email link, voice) are pending; voice additionally needs Twilio creds.
 
 ---
 
 ## Module 8: Session & Call Management
 
-**Status:** 🟡 (session lifecycle + notes + docs + history done; no-show/reminders/post-session email blocked on client integrations)
+**Status:** 🟡 (session lifecycle + notes + docs + history + timing + no-show + reschedule done; reminders/post-session email blocked on client integrations)
 
 Full session lifecycle, notes, history, documents, no-shows, reminders, post-session emails.
 
@@ -346,12 +350,19 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 - [x] Listener session history page (`/team-member/sessions` — past sessions, mode, status, notes badge, open/continue link)
 - [x] Customer documents tab (profile "Documents" now lists saved session-notes/consent documents from the customer's own rows)
 - [x] RLS: customer sees own history; listeners see assigned; admins see all (`is_admin()` helper)
-- [ ] Default session timing: 15-min length, 14-min warning, auto-end, manual extension
-- [ ] Session notes PDF download/export from a `documents` row
+- [x] Migration `0017_sessions_notifications.sql` — `sessions.end_reason` (why a session ended) + `notifications` table (owner RLS) + `decrement_positions_after()` RPC for queue-leave
+- [x] Default session timing: 15-min length, 14-min warning, auto-end, manual 5-min extension (live countdown timer in `SessionRoom`)
+- [x] Safety disconnect with reason — `POST /api/session/[id]/end` records `end_reason` and ends the session; end-reason dialog in `SessionRoom`
+- [x] Debrief pause — completing a session auto-pauses the listener's queue availability
+- [x] No-show handling — `POST /api/bookings/[id]/no-show` sets `booking_status = no_show` and frees the `availability_slots` slot; **Mark No-show** button on the listener dashboard
+- [x] Reschedule booking — `PATCH /api/bookings/[id]` (frees old slot, claims new) + `GET /api/bookings/[id]/reschedule-options` + Reschedule button/dialog in the profile "Conversations" tab
+- [x] Session-notes PDF / print export — **Download / Print** action on each document card (client-side printable window)
+- [x] Leave queue — `POST /api/queue/leave` (status → `left`, frees position) + Leave-queue button in `QueueStatus`
+- [x] Real listeners-available count — `getListenersAvailableCount()` (counts `open_queue_enabled` listeners) wired into the `ChatQueueWidget` on `/community` and `/chat-queue`
+- [x] In-app notification center — `notifications` table, `/notifications` inbox, navbar bell with live unread badge, `POST /api/notifications/read` (mark read/all), and hooks fired on queue-assign + session-complete
 - [ ] Post-session email to consumer (synopsis + encouraging words) — automatic *(Blocked until Resend configured)*
-- [ ] No-show handling (mark no-show, free slot)
 - [ ] Email/SMS reminders (24h, 15 min before session): 24h via Resend, 15-min via Twilio *(Blocked until client creds)*
-- [ ] Customer-facing session history list (past sessions + listener/type) — currently covered by bookings "History" + Documents tab
+- [ ] No-show reported per-customer in admin reporting (metrics)
 
 ### Questions
 - (none yet)
@@ -363,7 +374,9 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 4. As the listener, open `/team-member/sessions` and confirm the completed session appears with the `Has notes` badge; "View / open" reopens it.
 5. A session marked **End Session** transitions to `ended` (not completed/docs).
 6. `sessions` RLS — confirm a customer can only see their own sessions and a listener only their assigned ones.
-7. Timing (14-min warning / auto-end), notes-PDF export, no-show, reminders, and post-session email remain **Blocked** until client credentials (see client checklist).
+7. Timing is now live in `SessionRoom`: a countdown shows remaining time, a warning banner appears at ≤1 min, the listener can **Extend by 5 min**, and the session auto-ends at 15 min. The **End Session** button opens an end-reason dialog (`sessions.end_reason`). Completing a session pauses the listener's queue availability for debrief.
+8. No-show (listener dashboard "Mark No-show"), booking **Reschedule** (profile Conversations), **Download/Print** on document cards, **Leave queue**, real listeners-available counts, and the **Notifications** inbox (navbar bell) are wired.
+9. Reminders (24h/15-min) and the automatic post-session email remain **Blocked** pending client credentials (see client checklist).
 
 ---
 
@@ -527,16 +540,15 @@ The queue join payment **reuses the same Stripe account** as Modules 1/4 (no new
 | 3 | **Twilio (or LiveKit) — decide voice provider** | Voice calls; realtime text chat uses Supabase Realtime | SweetJS confirmation in Cross-Module notes | ⬜ |
 
 ### Module 7 — Listener Dashboard & Availability
-Core portal is REAL (**queue toggle/pool/accept**, weekly availability, dashboard hours, consumer-profile view) — no client action needed. Remaining listener items depend on **Supabase Auth** (below) + Twilio:
+Core portal is REAL (queue toggle/pool/accept, weekly availability, dashboard **hours + 15hr/week cap enforcement**, consumer-profile view, **no-show action**) — no client action needed. Remaining listener items depend on **Supabase Auth** (below) + Twilio:
 - Listener provisioning (admin creates username + first-login password) needs **Supabase email/SMS password auth enabled** — ⬜ (scale & extensions, see Module 1)
 - **Voice** sessions from the dashboard — ⬜ (Twilio above)
 
 ### Module 8 — Session & Call Management
-Core lifecycle is REAL (**chat sessions, listener notes + Complete flow, auto-created session-notes documents, listener `/team-member/sessions` history, customer Documents tab**) — no client action needed for those. Remaining items block on the integrations above:
+Core lifecycle is REAL (**chat sessions, listener notes + Complete flow, auto-created session-notes documents, listener `/team-member/sessions` history, customer Documents tab, 15-min session timing with 14-min warning + auto-end + extend, safety-disconnect with recorded reason, no-show handling, booking reschedule, session-notes Download/Print, leave-queue, real listeners-available counts, in-app notifications**) — no client action needed for those. Remaining items block on the integrations above:
 - **Post-session synopsis email** (auto after a session completes) — needs **Resend** configured (Module 1) — ⬜
 - **Email/SMS reminders** (24h via Resend, 15-min SMS via Twilio) — needs **Resend** + a **Twilio SMS-capable number** (Module 6) — ⬜
 - **Voice** phone sessions from the session room — needs **Twilio** (Module 6) — ⬜
-- **No-show handling** + **session-notes PDF export** — pure app work, no client credential (not yet built) — 🟡
 
 ### Module 9 — Admin Interface
 Most of the admin portal is REAL and needs no client action (role-guarded `/admin` dashboard, listener management + hours, sessions monitor, consumer management, reports, support/refund tickets). Remaining module-9 items depend on already-listed integrations + no extra tool for the core:
@@ -552,7 +564,7 @@ Most of the super-admin portal is REAL and needs no client action (role-guarded 
 ### Module 11 — Content, Email & Marketing Templates
 Community rooms + crisis content management is REAL and needs no client action (admin-editable via `/admin/content`, shown live on `/community` and `/crisis`). Email **templates** are authorable by super-admin (module 11 section, `/super-admin/email-templates`). What's left is delivery, which all reuses **Resend** (Module 1):
 - **Resend API key + sender email** — enables verification email, booking confirmations, reminders, receipts, session synopsis (templates are ready; sending is wired to send once the key is provided) — ⬜
-- **In-app notification center** — optional; not started — ⬜
+- **In-app notification center** — built (`notifications` table, `/notifications` inbox, navbar bell with unread badge, mark-read API) — no client credential — ✅
 
 ### Global / Platform
 

@@ -88,11 +88,21 @@ const orientationPreferenceOptions = [
   { value: "no-match-needed", label: "No specific preference" },
 ];
 
-export function BookListenerFlow() {
+type Props = {
+  freeBookingEnabled?: boolean;
+  scheduledPhoneEnabled?: boolean;
+};
+
+export function BookListenerFlow({
+  freeBookingEnabled = true,
+  scheduledPhoneEnabled = true,
+}: Props = {}) {
   const supabase = createClient();
   const { isAuthenticated, isLoading, user } = useAuth();
 
-  const [type, setType] = useState<"phone" | "chat">("phone");
+  const [type, setType] = useState<"phone" | "chat">(
+    scheduledPhoneEnabled ? "phone" : "chat",
+  );
   const [paymentOption, setPaymentOption] = useState<"paid" | "free">("paid");
   const [concern, setConcern] = useState("");
   const [gender, setGender] = useState("no-preference");
@@ -201,7 +211,9 @@ export function BookListenerFlow() {
           </h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          {conversationTypes.map((t) => (
+          {conversationTypes
+            .filter((t) => t.id !== "phone" || scheduledPhoneEnabled)
+            .map((t) => (
             <Card
               key={t.id}
               onClick={() => setType(t.id as "phone" | "chat")}
@@ -241,12 +253,14 @@ export function BookListenerFlow() {
                             Pay {t.price}
                           </Label>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="free" id={`${t.id}-free`} />
-                          <Label htmlFor={`${t.id}-free`} className="cursor-pointer font-normal">
-                            Free option
-                          </Label>
-                        </div>
+                        {freeBookingEnabled && (
+                          <div className="flex items-center space-x-2">
+                            <RadioGroupItem value="free" id={`${t.id}-free`} />
+                            <Label htmlFor={`${t.id}-free`} className="cursor-pointer font-normal">
+                              Free option
+                            </Label>
+                          </div>
+                        )}
                       </RadioGroup>
                     </div>
                   </div>

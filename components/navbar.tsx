@@ -13,6 +13,7 @@ import { Menu, Phone, User, LayoutDashboard, Shield } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useAuth } from "@/hooks/use-auth";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 const navLinks = [
   { href: "/", label: "Home" },
@@ -75,6 +76,7 @@ export function Navbar() {
               </Button>
             </Link>
           )}
+          <NotificationBell />
           <LogoutButton />
         </>
       ) : (

@@ -8,12 +8,14 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { AnimatedWritingAvatar } from "@/components/animated-writing-avatar";
 import { BookListenerFlow } from "@/components/book-listener/book-listener-flow";
+import { getFeatureFlags } from "@/lib/feature-flags";
 
 export const metadata: Metadata = {
   title: "Book a Listener | Our Ears Are Open",
   description:
     "Take the first step toward peace. Book a 15-minute phone or chat conversation with a caring listener. Free option available.",
 };
+export const dynamic = "force-dynamic";
 
 const steps = [
   { number: 1, label: "Conversation Type" },
@@ -28,6 +30,8 @@ export default async function BookListenerPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const flags = await getFeatureFlags();
 
   if (user) {
     const { data: profile } = await supabase
@@ -104,7 +108,10 @@ export default async function BookListenerPage() {
       <section className="bg-brown py-12 md:py-16">
         <div className="container mx-auto px-4">
           <div className="mx-auto max-w-4xl">
-            <BookListenerFlow />
+            <BookListenerFlow
+              freeBookingEnabled={flags.free_booking}
+              scheduledPhoneEnabled={flags.scheduled_phone}
+            />
           </div>
         </div>
       </section>

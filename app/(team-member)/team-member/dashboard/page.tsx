@@ -19,6 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { MarkNoShowButton } from "@/components/team-member/mark-no-show-button";
 
 export const metadata: Metadata = {
   title: "Dashboard | Team Member Portal",
@@ -196,11 +197,14 @@ export default async function TeamMemberDashboardPage() {
                         : "Time to be confirmed"}
                     </p>
                   </div>
-                  <Button size="sm" asChild>
-                    <Link href={`/session/${b.id}?origin=booking`}>
-                      {b.type === "phone" ? "Start Call" : "Open Chat"}
-                    </Link>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" asChild>
+                      <Link href={`/session/${b.id}?origin=booking`}>
+                        {b.type === "phone" ? "Start Call" : "Open Chat"}
+                      </Link>
+                    </Button>
+                    <MarkNoShowButton bookingId={b.id} />
+                  </div>
                 </li>
               ))}
             </ul>

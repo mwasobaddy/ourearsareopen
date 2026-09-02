@@ -642,10 +642,52 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          link: string | null
+          read_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          link?: string | null
+          read_at?: string | null
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          link?: string | null
+          read_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           booking_id: string | null
           created_at: string
+          end_reason: string | null
           ended_at: string | null
           id: string
           listener_id: string
@@ -661,6 +703,7 @@ export type Database = {
         Insert: {
           booking_id?: string | null
           created_at?: string
+          end_reason?: string | null
           ended_at?: string | null
           id?: string
           listener_id: string
@@ -676,6 +719,7 @@ export type Database = {
         Update: {
           booking_id?: string | null
           created_at?: string
+          end_reason?: string | null
           ended_at?: string | null
           id?: string
           listener_id?: string
@@ -781,6 +825,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      decrement_positions_after: {
+        Args: { p_before_position?: number }
+        Returns: undefined
+      }
       decrement_waiting_positions: { Args: never; Returns: undefined }
       delete_my_account: { Args: never; Returns: undefined }
       is_admin: { Args: never; Returns: boolean }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { createNotification } from "@/lib/session-ops";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -113,6 +114,13 @@ export async function POST(req: NextRequest) {
         { status: 500 },
       );
     }
+    await createNotification({
+      userId: user.id,
+      type: "queue_assigned",
+      title: "A listener is ready for you",
+      body: "You've been matched with a listener. Open the chat to start your conversation.",
+      link: `/session/${entry.id}?origin=queue`,
+    });
     return NextResponse.json({ entry, alreadyJoined: false });
   }
 

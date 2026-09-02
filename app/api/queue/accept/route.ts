@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listenerAtHoursCap, createNotification } from "@/lib/session-ops";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -61,6 +62,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Enforce the 15 hr/week (1099) cap before accepting a new session.
+  const { atCap, hoursThisWeek } = await listenerAtHoursCap(user.id);
+  if (atCap) {
+    return NextResponse.json(
+      {
+        error:
+          "You have reached the 15 hr/week cap for this pay period.",
+        hoursThisWeek,
+      },
+      { status: 409 },
+    );
+  }
+
   await admin
     .from("queue_entries")
     .update({
@@ -72,6 +86,22 @@ export async function POST(req: NextRequest) {
 
   // Everyone behind them moves up one spot.
   await admin.rpc("decrement_waiting_positions");
+
+  // Notify the consumer that they've been matched.
+  const { data: assigned } = await admin
+    .from("queue_entries")
+    .select("user_id")
+    .eq("id", entry.id)
+    .maybeSingle();
+  if (assigned) {
+    await createNotification({
+      userId: assigned.user_id,
+      type: "queue_assigned",
+      title: "A listener is ready for you",
+      body: "You've been matched with a listener. Open the chat to start your conversation.",
+      link: `/session/${entry.id}?origin=queue`,
+    });
+  }
 
   return NextResponse.json({ ok: true, queue_entry_id: entry.id });
 }

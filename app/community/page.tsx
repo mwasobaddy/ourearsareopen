@@ -23,6 +23,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ChatQueueWidget } from "@/components/community/chat-queue-widget";
 import { getActiveContentRooms } from "@/lib/content";
+import { getListenersAvailableCount } from "@/lib/session-ops";
 
 export const metadata: Metadata = {
   title: "Community | Our Ears Are Open",
@@ -115,6 +116,7 @@ const guidelines = [
 
 export default async function CommunityPage() {
   const dbRooms = await getActiveContentRooms();
+  const listenersAvailable = await getListenersAvailableCount();
   const rooms = dbRooms.map((room) => {
     const meta = DEFAULT_ROOM_META[room.slug] ?? {
       members: 0,
@@ -217,7 +219,10 @@ export default async function CommunityPage() {
                 Want to Talk to a Real Listener?
               </h2>
             </div>
-            <ChatQueueWidget listenersAvailable={3} waitMinutes={5} />
+            <ChatQueueWidget
+              listenersAvailable={listenersAvailable}
+              waitMinutes={5}
+            />
           </div>
         </div>
       </section>

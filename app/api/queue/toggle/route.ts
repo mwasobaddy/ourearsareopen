@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listenerAtHoursCap } from "@/lib/session-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +69,21 @@ export async function POST(_req: NextRequest) {
   }
 
   const nextEnabled = !profile.open_queue_enabled;
+
+  // Enforce the 15 hr/week (1099) cap before a listener re-opens availability.
+  if (nextEnabled) {
+    const { atCap, hoursThisWeek } = await listenerAtHoursCap(user.id);
+    if (atCap) {
+      return NextResponse.json(
+        {
+          error:
+            "You have reached the 15 hr/week cap for this pay period. You can re-enable availability when the week resets.",
+          hoursThisWeek,
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   await admin
     .from("profiles")

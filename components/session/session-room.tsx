@@ -12,16 +12,41 @@ import {
   LogOut,
   StickyNote,
   CheckCircle2,
+  Timer,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/supabase/database.types";
 
 type SessionRow = Database["public"]["Tables"]["sessions"]["Row"];
 type MessageRow = Database["public"]["Tables"]["messages"]["Row"];
+
+const SESSION_MS = 15 * 60_000;
+const EXTEND_MS = 5 * 60_000;
+const WARN_MS = 60_000;
+
+const END_REASONS = [
+  "Consumer became distressed",
+  "Abusive or inappropriate language",
+  "Consumer requested to end",
+  "Listener felt unsafe",
+  "Technical issue",
+  "Session naturally ended",
+  "Other",
+];
 
 type Props = {
   origin: "queue" | "booking";
@@ -46,6 +71,13 @@ export function SessionRoom({ origin, refId }: Props) {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const [extensionMs, setExtensionMs] = useState(0);
+  const [endDialogOpen, setEndDialogOpen] = useState(false);
+  const [endReason, setEndReason] = useState("");
+  const [endDetails, setEndDetails] = useState("");
+  const autoEndRef = useRef(false);
+  const endingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const joinedRef = useRef(false);
   const channelRef = useRef<
@@ -219,15 +251,74 @@ export function SessionRoom({ origin, refId }: Props) {
     if (error) toast.error("Couldn't update the session.");
   }
 
-  async function handleEnd() {
-    if (!session) return;
-    const now = new Date().toISOString();
-    const { error } = await supabase
-      .from("sessions")
-      .update({ status: "ended", ended_at: now })
-      .eq("id", session.id)
-      .in("status", ["active", "left"]);
-    if (error) toast.error("Couldn't end the session.");
+  async function handleEnd(reason?: string) {
+    if (!session || endingRef.current) return;
+    endingRef.current = true;
+    try {
+      const res = await fetch(`/api/session/${session.id}/end`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason ?? undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't end the session.");
+        return;
+      }
+      setSession(data.session);
+      setEndDialogOpen(false);
+      setEndReason("");
+      setEndDetails("");
+    } catch {
+      toast.error("Couldn't end the session.");
+    } finally {
+      endingRef.current = false;
+    }
+  }
+
+  async function handleConfirmEnd() {
+    const reason = endReason
+      ? endDetails.trim()
+        ? `${endReason} — ${endDetails.trim()}`
+        : endReason
+      : endDetails.trim() || undefined;
+    await handleEnd(reason);
+  }
+
+  function handleExtend() {
+    setExtensionMs((m) => m + EXTEND_MS);
+    toast.success("Session extended by 5 minutes.");
+  }
+
+  // Tick while the session is active so the countdown stays fresh.
+  useEffect(() => {
+    if (session?.status !== "active") return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [session?.id, session?.status]);
+
+  const startedAtMs = session?.started_at ? Date.parse(session.started_at) : null;
+  const endAtMs = startedAtMs != null ? startedAtMs + SESSION_MS + extensionMs : null;
+  const remainingMs = endAtMs != null ? Math.max(0, endAtMs - now) : null;
+  const isActive = session?.status === "active";
+  const showWarning = isActive && remainingMs != null && remainingMs <= WARN_MS;
+  const showExtend = isActive && remainingMs != null && remainingMs > 0 && remainingMs <= WARN_MS;
+  const overdue = isActive && remainingMs === 0;
+
+  // Auto-end when the 15-minute session (plus extensions) elapses.
+  useEffect(() => {
+    if (!overdue || autoEndRef.current) return;
+    autoEndRef.current = true;
+    void handleEnd(session ? "Session auto-ended after 15 minutes." : undefined);
+    toast.info("Your session has ended automatically.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overdue]);
+
+  function formatRemaining(ms: number): string {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
 
   async function handleSaveNotes() {
@@ -317,6 +408,12 @@ export function SessionRoom({ origin, refId }: Props) {
             <CardTitle className="text-base">Live Session</CardTitle>
             <p className="text-xs text-muted-foreground capitalize">
               {session.mode} · {session.status}
+              {isActive && remainingMs != null && (
+                <span className="ml-2 inline-flex items-center gap-1 text-foreground">
+                  <Timer className="h-3 w-3" />
+                  {formatRemaining(remainingMs)} remaining
+                </span>
+              )}
             </p>
           </div>
         </div>
@@ -333,7 +430,7 @@ export function SessionRoom({ origin, refId }: Props) {
           <Button
             variant="destructive"
             size="sm"
-            onClick={handleEnd}
+            onClick={() => setEndDialogOpen(true)}
             disabled={isOver}
           >
             <LogOut className="mr-2 h-4 w-4" />
@@ -341,6 +438,28 @@ export function SessionRoom({ origin, refId }: Props) {
           </Button>
         </div>
       </CardHeader>
+
+      {showWarning && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-crisis/30 bg-crisis/10 px-4 py-2.5 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-crisis" />
+          <span className="text-foreground">
+            {remainingMs === 0
+              ? "Session time has elapsed."
+              : "Your session will end within the next minute."}
+          </span>
+          {showExtend && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={handleExtend}
+            >
+              <Timer className="mr-1.5 h-4 w-4" />
+              Extend by 5 min
+            </Button>
+          )}
+        </div>
+      )}
 
       <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
         <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -447,6 +566,55 @@ export function SessionRoom({ origin, refId }: Props) {
           </Button>
         </form>
       )}
+
+      <Dialog open={endDialogOpen} onOpenChange={setEndDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>End this session?</DialogTitle>
+            <DialogDescription>
+              Choose why the session is ending (optional). This is recorded in
+              the session history for safety review.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="end-reason">Reason</Label>
+              <select
+                id="end-reason"
+                value={endReason}
+                onChange={(e) => setEndReason(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">No reason</option>
+                {END_REASONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="end-details">Details (optional)</Label>
+              <Textarea
+                id="end-details"
+                value={endDetails}
+                onChange={(e) => setEndDetails(e.target.value)}
+                placeholder="Anything a safety reviewer should know…"
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEndDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmEnd}>
+              <LogOut className="mr-2 h-4 w-4" />
+              End Session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

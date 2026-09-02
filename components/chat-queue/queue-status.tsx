@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CheckCircle, Loader2, MessageSquare, Users } from "lucide-react";
+import {
+  CheckCircle,
+  Loader2,
+  MessageSquare,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
@@ -18,6 +24,8 @@ export function QueueStatus({ paymentId }: Props) {
   const supabase = createClient();
   const [entry, setEntry] = useState<QueuedRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [leaving, setLeaving] = useState(false);
+  const [leftQueue, setLeftQueue] = useState(false);
   const joinedRef = useRef(false);
 
   useEffect(() => {
@@ -88,12 +96,48 @@ export function QueueStatus({ paymentId }: Props) {
     };
   }, [paymentId, supabase]);
 
+  async function handleLeave() {
+    setLeaving(true);
+    try {
+      const res = await fetch("/api/queue/leave", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't leave the queue right now.");
+        return;
+      }
+      setEntry(null);
+      setLeftQueue(true);
+    } catch {
+      toast.error("Couldn't leave the queue right now.");
+    } finally {
+      setLeaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <Card>
         <CardContent className="flex items-center justify-center gap-3 py-16 text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
           Joining the queue…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (leftQueue) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center gap-2 p-10 text-center">
+          <XCircle className="h-8 w-8 text-muted-foreground" />
+          <h3 className="text-xl font-bold text-foreground">You left the queue</h3>
+          <p className="max-w-md text-sm text-muted-foreground">
+            You can join again anytime. If you faced any issues, we&apos;re here
+            to help.
+          </p>
+          <a href="/chat-queue" className="mt-2">
+            <Button variant="outline">Back to Queue</Button>
+          </a>
         </CardContent>
       </Card>
     );
@@ -151,6 +195,18 @@ export function QueueStatus({ paymentId }: Props) {
                 Open Chat
               </a>
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1"
+              onClick={handleLeave}
+              disabled={leaving}
+            >
+              {leaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Leave queue
+            </Button>
           </>
         ) : (
           <>
@@ -167,6 +223,20 @@ export function QueueStatus({ paymentId }: Props) {
               A listener will be matched to you as soon as one is available.
               Keep this page open — we&apos;ll update you in real time.
             </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1"
+              onClick={handleLeave}
+              disabled={leaving}
+            >
+              {leaving ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="mr-2 h-4 w-4" />
+              )}
+              Leave queue
+            </Button>
           </>
         )}
       </CardContent>

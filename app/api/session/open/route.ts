@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { listenerAtHoursCap, createNotification } from "@/lib/session-ops";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -116,6 +117,20 @@ export async function POST(req: NextRequest) {
 
   if (existing) {
     return NextResponse.json({ session: existing, alreadyOpen: true });
+  }
+
+  // Enforce the 15 hr/week (1099) cap when a listener starts a new session.
+  if (user.id === listenerId) {
+    const { atCap } = await listenerAtHoursCap(user.id);
+    if (atCap) {
+      return NextResponse.json(
+        {
+          error:
+            "You have reached the 15 hr/week cap for this pay period.",
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const startedAt = new Date().toISOString();

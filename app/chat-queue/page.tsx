@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MessageSquare, AlertTriangle, Heart, Users } from "lucide-react";
 import { ChatQueueDonationForm } from "@/components/chat-queue/chat-queue-donation-form";
+import { ChatQueueWidget } from "@/components/community/chat-queue-widget";
 import { isFeatureEnabled } from "@/lib/feature-flags";
+import { getListenersAvailableCount } from "@/lib/session-ops";
 
 export const metadata: Metadata = {
   title: "Open Queue Chat | Our Ears Are Open",
@@ -14,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ChatQueuePage() {
   const openQueue = await isFeatureEnabled("open_queue");
+  const listenersAvailable = openQueue
+    ? await getListenersAvailableCount()
+    : 0;
   return (
     <>
       {/* Crisis Warning Banner */}
@@ -85,7 +90,16 @@ export default async function ChatQueuePage() {
             </div>
 
             {openQueue ? (
-              <ChatQueueDonationForm />
+              <>
+                <div className="mb-6">
+                  <ChatQueueWidget
+                    listenersAvailable={listenersAvailable}
+                    waitMinutes={5}
+                    compact
+                  />
+                </div>
+                <ChatQueueDonationForm />
+              </>
             ) : (
               <div className="rounded-lg border border-border bg-muted/40 p-6 text-center text-sm text-muted-foreground">
                 The open queue is temporarily unavailable. Please check back

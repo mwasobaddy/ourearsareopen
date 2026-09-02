@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { ProfileView, type ProfileData } from "@/components/profile/profile-view";
 
 export const metadata: Metadata = {
@@ -27,6 +28,17 @@ export default async function ProfilePage() {
     .eq("id", user.id)
     .single();
 
+  let assignedListenerName: string | null = null;
+  if (profile?.assigned_listener_id) {
+    const admin = createAdminClient();
+    const { data: al } = await admin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", profile.assigned_listener_id)
+      .maybeSingle();
+    assignedListenerName = al?.full_name ?? null;
+  }
+
   const data: ProfileData = profile ?? {
     id: user.id,
     email: user.email ?? null,
@@ -51,7 +63,7 @@ export default async function ProfilePage() {
   return (
     <section className="bg-background py-12 md:py-16">
       <div className="container mx-auto px-4">
-        <ProfileView profile={data} />
+        <ProfileView profile={data} assignedListenerName={assignedListenerName} />
       </div>
     </section>
   );

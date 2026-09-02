@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Clock,
   MessageSquare,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -25,6 +26,14 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type ProfileData = {
   id: string;
@@ -67,7 +76,13 @@ type DocumentRow = {
   created_at: string;
 };
 
-export function ProfileView({ profile }: { profile: ProfileData }) {
+export function ProfileView({
+  profile,
+  assignedListenerName,
+}: {
+  profile: ProfileData;
+  assignedListenerName?: string | null;
+}) {
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatar, setAvatar] = useState(profile.avatar_url);
@@ -77,6 +92,13 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
+  const [rescheduleFor, setRescheduleFor] = useState<Booking | null>(null);
+  const [rescheduleOptions, setRescheduleOptions] = useState<
+    { id: string; starts_at: string; ends_at: string }[]
+  >([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [savingReschedule, setSavingReschedule] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -131,6 +153,94 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
       prev.map((b) => (b.id === id ? { ...b, status: "cancelled" } : b)),
     );
     toast.success("Booking cancelled");
+  }
+
+  async function openReschedule(booking: Booking) {
+    setRescheduleFor(booking);
+    setSelectedSlot(null);
+    setRescheduleOptions([]);
+    setLoadingOptions(true);
+    try {
+      const res = await fetch(
+        `/api/bookings/${booking.id}/reschedule-options`,
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't load available times.");
+        return;
+      }
+      setRescheduleOptions(data.slots ?? []);
+    } catch {
+      toast.error("Couldn't load available times.");
+    } finally {
+      setLoadingOptions(false);
+    }
+  }
+
+  async function confirmReschedule() {
+    if (!rescheduleFor || !selectedSlot) {
+      toast.error("Please choose a new time.");
+      return;
+    }
+    const slot = rescheduleOptions.find((s) => s.id === selectedSlot);
+    if (!slot) return;
+    setSavingReschedule(true);
+    try {
+      const res = await fetch(`/api/bookings/${rescheduleFor.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slot_start: slot.starts_at,
+          slot_end: slot.ends_at,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't reschedule the booking.");
+        return;
+      }
+      toast.success("Appointment rescheduled.");
+      setRescheduleFor(null);
+      setSelectedSlot(null);
+      // Refresh the local booking list.
+      const { data: updated } = await supabase
+        .from("bookings")
+        .select("id, type, payment_option, concern, slot_start, status, updated_at")
+        .eq("user_id", profile.id)
+        .order("slot_start", { ascending: false });
+      if (updated) setBookings((updated as Booking[]) ?? []);
+    } catch {
+      toast.error("Couldn't reschedule the booking.");
+    } finally {
+      setSavingReschedule(false);
+    }
+  }
+
+  function handleDownloadDocument(doc: DocumentRow) {
+    const content = `
+Chat/document record — Our Ears Are Open
+==========================================
+Title:  ${doc.title}
+Type:   ${doc.type.replace("_", " ")}
+Date:   ${new Date(doc.created_at).toLocaleString()}
+
+${doc.summary ?? "No summary provided."}
+`;
+    const win = window.open("", "_blank");
+    if (!win) {
+      toast.error("Allow pop-ups to download this document.");
+      return;
+    }
+    win.document.write(
+      `<html><head><title>${doc.title}</title></head><body><pre>${content
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")}</pre></body></html>`,
+    );
+    win.document.close();
+    win.focus();
+    win.print();
   }
 
   const memberSince = profile.created_at
@@ -334,7 +444,12 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
                   ) : (
                     <div className="space-y-4">
                       {upcomingBookings(bookings).map((b) => (
-                        <BookingRow key={b.id} booking={b} onCancel={handleCancelBooking} />
+                        <BookingRow
+                        key={b.id}
+                        booking={b}
+                        onCancel={handleCancelBooking}
+                        onReschedule={openReschedule}
+                      />
                       ))}
                       <Link href="/book-listener">
                         <Button variant="outline" className="w-full bg-transparent">
@@ -418,6 +533,15 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
                         year: "numeric",
                       })}
                     </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => handleDownloadDocument(doc)}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download / Print
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -447,6 +571,12 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
                 <InfoField label="Email" value={profile.email || "—"} />
                 <InfoField label="Phone" value={profile.phone || "—"} />
                 <InfoField label="Pronouns" value={profile.pronouns || "—"} />
+                {assignedListenerName ? (
+                  <InfoField
+                    label="Assigned Listener"
+                    value={assignedListenerName}
+                  />
+                ) : null}
                 <InfoField label="Age Range" value={profile.age_range || "—"} />
                 <InfoField label="Country" value={profile.country || "—"} />
                 <InfoField
@@ -586,6 +716,79 @@ export function ProfileView({ profile }: { profile: ProfileData }) {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={rescheduleFor !== null}
+        onOpenChange={(open) => !open && setRescheduleFor(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reschedule appointment</DialogTitle>
+            <DialogDescription>
+              Pick a new available time with your listener.
+            </DialogDescription>
+          </DialogHeader>
+          {loadingOptions ? (
+            <div className="flex items-center justify-center gap-3 py-10 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading available times…
+            </div>
+          ) : rescheduleOptions.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No other times are currently available. Please try again later.
+            </p>
+          ) : (
+            <div className="grid max-h-72 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+              {rescheduleOptions.map((slot) => (
+                <button
+                  key={slot.id}
+                  type="button"
+                  onClick={() => setSelectedSlot(slot.id)}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    selectedSlot === slot.id
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary"
+                  }`}
+                >
+                  <div className="font-medium text-foreground">
+                    {new Date(slot.starts_at).toLocaleString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {Math.round(
+                      (new Date(slot.ends_at).getTime() -
+                        new Date(slot.starts_at).getTime()) /
+                        60_000,
+                    )}{" "}
+                    min
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRescheduleFor(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmReschedule}
+              disabled={!selectedSlot || savingReschedule}
+            >
+              {savingReschedule ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Clock className="mr-2 h-4 w-4" />
+              )}
+              Confirm new time
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -612,9 +815,11 @@ function pastBookings(bookings: Booking[]) {
 function BookingRow({
   booking,
   onCancel,
+  onReschedule,
 }: {
   booking: Booking;
   onCancel?: (id: string) => void;
+  onReschedule?: (booking: Booking) => void;
 }) {
   const dateStr = booking.slot_start
     ? new Date(booking.slot_start).toLocaleString("en-US", {
@@ -653,15 +858,30 @@ function BookingRow({
           </span>
         ) : null}
       </div>
-      {onCancel && (booking.status === "pending" || booking.status === "confirmed") ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onCancel(booking.id)}
-          className="shrink-0 text-destructive hover:text-destructive"
-        >
-          Cancel
-        </Button>
+      {(onCancel || onReschedule) &&
+      (booking.status === "pending" || booking.status === "confirmed") ? (
+        <div className="flex shrink-0 items-center gap-1">
+          {onReschedule && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onReschedule(booking)}
+              className="shrink-0"
+            >
+              Reschedule
+            </Button>
+          )}
+          {onCancel && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onCancel(booking.id)}
+              className="shrink-0 text-destructive hover:text-destructive"
+            >
+              Cancel
+            </Button>
+          )}
+        </div>
       ) : null}
     </div>
   );
