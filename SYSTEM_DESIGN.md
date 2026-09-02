@@ -4,6 +4,8 @@
 
 **Architecture:** Next.js 16 (App Router) + Supabase (Postgres, Auth, Realtime, Storage) + Stripe + Twilio. Next.js API routes for server-only glue code (Stripe/Twilio/webhooks). No separate backend directory — single repo, single deploy.
 
+> **Stack note vs `docs/SCOPE_OF_WORK.md`:** The scope doc describes a *BunJS + MongoDB + WebSocket* backend and a Mongo collection list. This tracker implements the **same features/modules** on **Next.js API routes + Postgres/Supabase + Supabase Realtime** instead — there are no separate `users`/`listeners`/`payments`/`audit_log`/`feature_flags`/`org_config` Mongo collections; those are **Postgres tables** here (users→`profiles`, payments→`payments`, content→`content_rooms`/`content_crisis`, config→`org_config`). Feature/module mapping below is source-of-truth; treat the scope doc's API paths as *suggestions* that map onto the nearest real route.
+
 **Convention for this document:**
 - Each module has a **TO-DO** list of concrete tasks.
 - When a task is complete, change its checkbox from `- [ ]` to `- [x]` and update the module status icon to `🟢`.
@@ -118,6 +120,7 @@ Completes the user's profile after signup (the `/profile/setup` wizard), persona
 - [x] Fixed infinite-recursion in `admins_read_all_profiles` via `is_admin()` SECURITY DEFINER helper (migration `0005`)
 - [x] End-to-end verified: signup trigger → profile read → full update → avatar upload → delete account (via admin-created confirmed test user)
 - [x] Assigned listener UI — the profile "Personal Information" tab shows the customer's assigned listener name when one is set (`profiles.assigned_listener_id`)
+- [ ] Assigned-listener assignment API (SCOPE 2.4 `GET/PATCH /api/users/me/assigned-listener`) — display is done, but there is no admin route to actually set/clear a customer's `assigned_listener_id`
 - [ ] `isProfileComplete` client-side shortcut / booking-route guard wiring (deferred to Module 3)
 
 ### Questions
@@ -208,14 +211,14 @@ All money movement: booking payment, one-off donations, chat-queue minimum payme
 ### TO-DO
 - [x] Install `stripe` SDK (`stripe@22`), `@stripe/stripe-js`, `@stripe/react-stripe-js`
 - [x] Create `app/api/stripe/payment-intent/route.ts` (create PaymentIntent for booking/donation)
-- [ ] Create `app/api/stripe/payment-methods/route.ts` (list/add/remove saved methods) — **deferred**
+- [ ] Create `app/api/stripe/payment-methods/route.ts` (list/add/remove saved methods) — **deferred** (Stripe **Customer objects** are already created and stored as `payments.stripe_customer_id`; only the saved-methods surface is unbuilt)
 - [x] Create `app/api/webhooks/stripe/route.ts` (verify signature, `payment_intent.succeeded` / `payment_failed` / `canceled`; idempotent; confirms paid bookings)
-- [x] Create `payments` table (stripe_payment_intent_id, user_id, amount_cents, type, bookings_id, status, receipt_url) — migration `0007_payments.sql`
-- [x] Wire `/payment?booking=<id>` page to create + confirm a real PaymentIntent (Stripe Elements)
+- [x] Create `payments` table (stripe_payment_intent_id, user_id, amount_cents, type, bookings_id, status, receipt_url, stripe_customer_id) — migration `0007_payments.sql`
+- [x] Wire `/payment?booking=<id>` page to create + confirm a real PaymentIntent (Stripe Elements); creates/looks up a Stripe `customer` and stores `stripe_customer_id`
 - [x] Wire `/donate` page for one-time donations (recurring/monthly deferred)
 - [x] Mark booking confirmed only on successful webhook (not on client success)
-- [ ] Admin-initiated refunds — **deferred**
-- [ ] Email receipts on payment — **deferred (needs Resend)**
+- [ ] Admin-initiated refunds — **deferred**: `support_tickets` records refund/support intent (migration `0014`) but the actual Stripe Refund API call is only issued once Stripe keys/welcome are configured
+- [ ] Email receipts on payment — **deferred (needs Resend)**; also not yet listed for post-session synopsis email
 - [x] Webhook security: verify Stripe signature, never trust client
 - [x] Typed Supabase clients via `lib/supabase/database.types.ts` (Database generic on client/server/admin)
 
@@ -248,7 +251,9 @@ Users pay minimum ($1) to join a live queue; the next available listener is assi
 - [x] `app/api/queue/toggle/route.ts` — listener "available for queue" toggle (assigns earliest waiting customer when turning ON)
 - [x] `app/api/stripe/payment-intent/route.ts` widened to `type: "queue"` (min $1)
 - [x] Rewritten queue payment form (`chat-queue-donation-form.tsx`) → PaymentIntent → `PaymentForm` → `/chat-queue/success?payment=`
-- [ ] "Listeners available now" stat for widget
+- [x] "Listeners available now" stat for widget — `getListenersAvailableCount()` (counts `open_queue_enabled` listeners) wired into the `ChatQueueWidget` on `/community` and `/chat-queue`
+- [ ] **Queue estimated wait time** (from SCOPE 5.1/5.2) — realtime position ✓ but wait-time estimate not yet surfaced
+- [ ] **Queue decline** (from SCOPE 5.3 / 7.5) — listener declines next customer with reason; only `queue/accept` exists today
 - [x] `app/api/queue/leave/route.ts` — mark my waiting/assigned entry `left`, free position; **Leave-queue** button in `QueueStatus`
 - [ ] Refund on leave / after abandonment policy
 - [ ] RLS: listeners see waiting pool; admins see all (customer sees own entry — done)
@@ -431,7 +436,7 @@ Platform ownership: org config, feature flags, Stripe/billing config, role assig
 - [x] Role assignment (promote/demote admin, listener, super_admin) via secure route + last-super-admin / self-lockout guards
 - [x] `audit_log` table for sensitive actions (role changes, deactivation, config/flag edits) + audit log page
 - [~] System notifications (email/SMS provider + templates) — informational page only; blocked until Resend/Twilio
-- [~] Wire `free_booking`/`scheduled_phone` flags into booking flows — flags exist; booking UI integration deferred (booking is paid-only today)
+- [x] Wire `free_booking`/`scheduled_phone` flags into booking flows — `BookListenerFlow` hides the Free option when `free_booking` is off and hides the Phone card (defaulting to chat) when `scheduled_phone` is off; flags passed from the server via `getFeatureFlags()`
 
 ### Questions
 - (none yet)
@@ -462,6 +467,7 @@ Community rooms, crisis content, and the email system. Content management is ful
 - [x] `email_templates` table + seed (welcome, booking confirm, reminder, receipt, synopsis) — migration `0016`, super-admin editable
 - [x] `/super-admin/email-templates` editor (subject/body/description; placeholders documented) — ready for when Resend is configured
 - [ ] Email delivery (Resend) — verification email, synopsis email, payment-link email, receipts, reminders — **blocked until client provides Resend API keys + from-address**
+- [ ] Admin send-email / campaign (SCOPE 11.6 `POST /api/admin/send-email`, list segments) — ability to email team members and consumers (ongoing notices); not yet tracked/built
 - [ ] In-app notification center (optional)
 
 ### Questions
