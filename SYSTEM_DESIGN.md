@@ -65,7 +65,7 @@ Handles registration, login, session persistence, password reset, email verifica
 - [x] **Email-verification flow** handled in register form (detects `identities.length === 0`, shows "check your email" screen instead of redirecting to profile)
 - [ ] Google/Apple OAuth wiring (awaiting client credentials — buttons left static)
 - [x] Admin/super-admin role-gated route protection — middleware reads `profiles.role`; `/admin` requires `admin`|`super_admin`, `/super-admin` requires `super_admin`, else redirect to `/profile`
-- [ ] Verify all role-based nav links render correctly in navbar
+- [x] **Verify all role-based nav links render correctly in navbar** — every authenticated user gets **Profile**; `listener`→Team Portal, `admin`→Admin, `super_admin`→Super Admin (unified desktop/mobile via shared portal config); login `redirectForRole` targets match each portal
 
 ### How to test — Module 1
 Run with `pnpm dev` (open `http://localhost:3000`). Recommended: create a fresh test account each time.

@@ -30,6 +30,16 @@ export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const { isAuthenticated, role } = useAuth();
 
+  // Role-specific portal button (shared by desktop + mobile).
+  const portal =
+    role === "listener"
+      ? { href: "/team-member", label: "Team Portal", icon: LayoutDashboard }
+      : role === "admin"
+        ? { href: "/admin", label: "Admin", icon: LayoutDashboard }
+        : role === "super_admin"
+          ? { href: "/super-admin", label: "Super Admin", icon: Shield }
+          : null;
+
   const rightSection = (
     <>
       <Link href="/crisis">
@@ -44,35 +54,17 @@ export function Navbar() {
       </Link>
       {isAuthenticated ? (
         <>
-          {(role === "customer" || !role) && (
-            <Link href="/profile">
-              <Button variant="ghost" size="sm">
-                <User className="mr-2 h-4 w-4" />
-                Profile
-              </Button>
-            </Link>
-          )}
-          {role === "listener" && (
-            <Link href="/team-member">
+          <Link href="/profile">
+            <Button variant="ghost" size="sm">
+              <User className="mr-2 h-4 w-4" />
+              Profile
+            </Button>
+          </Link>
+          {portal && (
+            <Link href={portal.href}>
               <Button variant="outline" size="sm">
-                <LayoutDashboard className="mr-2 h-4 w-4" />
-                Team Portal
-              </Button>
-            </Link>
-          )}
-          {role === "admin" && (
-            <Link href="/admin">
-              <Button variant="outline" size="sm">
-                <LayoutDashboard className="mr-2 h-4 w-4" />
-                Admin
-              </Button>
-            </Link>
-          )}
-          {role === "super_admin" && (
-            <Link href="/super-admin">
-              <Button variant="outline" size="sm">
-                <Shield className="mr-2 h-4 w-4" />
-                Super Admin
+                <portal.icon className="mr-2 h-4 w-4" />
+                {portal.label}
               </Button>
             </Link>
           )}
@@ -155,35 +147,17 @@ export function Navbar() {
                 </Link>
                 {isAuthenticated ? (
                   <>
-                    {(role === "customer" || !role) && (
-                      <Link href="/profile" onClick={() => setIsOpen(false)}>
-                        <Button variant="outline" className="w-full bg-transparent">
-                          <User className="mr-2 h-4 w-4" />
-                          Profile
-                        </Button>
-                      </Link>
-                    )}
-                    {role === "listener" && (
-                      <Link href="/team-member" onClick={() => setIsOpen(false)}>
+                    <Link href="/profile" onClick={() => setIsOpen(false)}>
+                      <Button variant="outline" className="w-full bg-transparent">
+                        <User className="mr-2 h-4 w-4" />
+                        Profile
+                      </Button>
+                    </Link>
+                    {portal && (
+                      <Link href={portal.href} onClick={() => setIsOpen(false)}>
                         <Button variant="outline" className="w-full">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          Team Portal
-                        </Button>
-                      </Link>
-                    )}
-                    {role === "admin" && (
-                      <Link href="/admin" onClick={() => setIsOpen(false)}>
-                        <Button variant="outline" className="w-full">
-                          <LayoutDashboard className="mr-2 h-4 w-4" />
-                          Admin
-                        </Button>
-                      </Link>
-                    )}
-                    {role === "super_admin" && (
-                      <Link href="/super-admin" onClick={() => setIsOpen(false)}>
-                        <Button variant="outline" className="w-full">
-                          <Shield className="mr-2 h-4 w-4" />
-                          Super Admin
+                          <portal.icon className="mr-2 h-4 w-4" />
+                          {portal.label}
                         </Button>
                       </Link>
                     )}
