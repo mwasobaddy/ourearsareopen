@@ -64,7 +64,7 @@ Handles registration, login, session persistence, password reset, email verifica
 - [x] **Reset-password form** wired to `exchangeCodeForSession` + `updateUser` (handles `token` and `code`)
 - [x] **Email-verification flow** handled in register form (detects `identities.length === 0`, shows "check your email" screen instead of redirecting to profile)
 - [ ] Google/Apple OAuth wiring (awaiting client credentials — buttons left static)
-- [ ] Admin/super-admin role-gated route protection (middleware reads role)
+- [x] Admin/super-admin role-gated route protection — middleware reads `profiles.role`; `/admin` requires `admin`|`super_admin`, `/super-admin` requires `super_admin`, else redirect to `/profile`
 - [ ] Verify all role-based nav links render correctly in navbar
 
 ### How to test — Module 1
