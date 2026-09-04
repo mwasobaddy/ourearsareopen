@@ -454,9 +454,9 @@ Platform ownership: org config, feature flags, Stripe/billing config, role assig
 
 ## Module 11: Content & Marketing
 
-**Status:** 🟡 (content management real end-to-end; **email delivery** blocked until client supplies Resend credentials)
+**Status:** 🟡 (content management real end-to-end; **email delivery being finalized** — Resend configured, in-app transactional email code being wired)
 
-Community rooms, crisis content, and the email system. Content management is fully wired; email templates are authorable but sending/delegation is client-blocked.
+Community rooms, crisis content, and the email system. Content management is fully wired; email templates are authorable. Resend credentials have been provided by the client and Supabase Auth SMTP configured; in-app transactional email sending (welcome, booking, receipt, synopsis, reminders) is being built on the Resend SDK.
 
 ### TO-DO
 - [x] `content_rooms` table + API + admin editing (migration `0016`) — public read / admin write (RLS via `is_admin()`)
@@ -466,9 +466,10 @@ Community rooms, crisis content, and the email system. Content management is ful
 - [x] `/crisis` reads active resources from `content_crisis` (phone/availability/primary rendering)
 - [x] `email_templates` table + seed (welcome, booking confirm, reminder, receipt, synopsis) — migration `0016`, super-admin editable
 - [x] `/super-admin/email-templates` editor (subject/body/description; placeholders documented) — ready for when Resend is configured
-- [ ] Email delivery (Resend) — verification email, synopsis email, payment-link email, receipts, reminders — **blocked until client provides Resend API keys + from-address**
+- [x] **Resend configured** by client (API key in `RESEND_API_KEY`; Supabase Auth SMTP → Resend verified in dashboard) — see **Email Delivery Setup** below
+- [x] **In-app notification center** — built (`notifications` table, `/notifications` inbox, navbar bell with unread badge, mark-read API) — no client credential
+- [ ] In-app transactional email sending (Resend SDK): `welcome`, `booking_confirm`, `session_receipt`, `session_synopsis`, `booking_reminder` — **in progress** (`lib/email.ts` + hooks at register / stripe webhook / session-complete / cron)
 - [ ] Admin send-email / campaign (SCOPE 11.6 `POST /api/admin/send-email`, list segments) — ability to email team members and consumers (ongoing notices); not yet tracked/built
-- [ ] In-app notification center (optional)
 
 ### Questions
 - (none yet)
@@ -478,7 +479,7 @@ Community rooms, crisis content, and the email system. Content management is ful
 2. `/admin/content` crisis section — edit a hotline's name/phone/availability or mark it primary; the public `/crisis` page updates (inactive resources hidden).
 3. Create a new room or crisis resource; it appears in the admin list and on the public page. Delete one and it disappears.
 4. Log in as a `super_admin` and open `/super-admin/email-templates` — author subject/body copy for each transactional template (saved to `email_templates`).
-5. Email *delivery* (verification, confirmations, receipts, synopsis, reminders) is **not live** — it requires client-provided Resend API keys + sender address (see launch checklist).
+5. **Auth email delivery is now LIVE** (verification + password reset) once Supabase Auth SMTP → Resend is configured (see **Email Delivery Setup**). In-app transactional emails (welcome, booking, receipt, synopsis, reminders) are wired via the Resend SDK in `lib/email.ts`.
 
 ---
 
@@ -488,13 +489,42 @@ This section captures decisions that span multiple modules. Revisit as you build
 
 - [ ] Confirm realtime approach: Supabase Realtime for chat/queue; Twilio or LiveKit for voice
 - [ ] Confirm file storage: Supabase Storage buckets (`avatars`, `documents`)
-- [ ] Confirm email provider: Resend (via Supabase Edge Function) vs built-in Supabase Auth emails
+- [x] Confirm email provider: **Resend** — auth emails via **Supabase Auth custom SMTP → Resend**; transactional/app emails via the **Resend SDK** in `lib/email.ts` (see **Email Delivery Setup** below)
 - [ ] Confirm RLS is the primary authorization mechanism everywhere
 - [ ] Confirm Next.js API routes used only for server-secret glue (Stripe/Twilio/webhooks)
 - [ ] Confirm deployment: Vercel (frontend+routes) + managed Supabase (DB/auth/storage/realtime)
 
-### Open Cross-Cutting Questions
-- (none yet)
+### Email Delivery Setup (resolved)
+
+> Two independent email channels. Auth emails are sent by **Supabase Auth**, transactional emails by **our app**. Both route through **Resend**.
+
+**1. Auth emails — verification, password reset, confirm signup** (configured in Supabase Dashboard, not code):
+1. Resend → **Domains** → **Add Domain**, paste the requested domain, and add the DNS records Resend gives you to your DNS host. Then **Verify**. The sender must be on this verified domain or SMTP won't send.
+2. Resend → **API Keys** → create a key. (For SMTP below, the **API key** doubles as the SMTP password.)
+3. Supabase Dashboard → **Authentication → Email → SMTP Settings** → toggle **"Enable custom SMTP" ON**:
+   - **Host:** `smtp.resend.com`
+   - **Port:** `465` (SSL, recommended)
+   - **Username:** `resend`
+   - **Password:** your Resend **API key**
+   - **Sender email:** `<from-address>@<verified-domain>` (e.g. `noreply@ourearsareopen.org`)
+   - **Sender name:** e.g. `Our Ears Are Open`
+   - Save.
+4. Supabase Dashboard → **Authentication → Email → Templates**: edit each template's subject/body + sender. Default template variables (Supabase uses `{{ .ConfirmationURL }}` in the **HTML body** and `{{ .ConfirmationURL }}` for confirm; other templates use `{{ .ResetURL }}`, `{{ .SiteURL }}`, `{{ .Email }}`).
+   - **Confirm signup** example HTML body:
+     ```html
+     <h2>Confirm your email address</h2>
+     <p>Follow the link below to confirm this email address and finish signing up.</p>
+     <p><a href="{{ .ConfirmationURL }}">Confirm email address</a></p>
+     ```
+   - The mailer appends the footer (resend/company name button) automatically via the **`{{ .Footer }}`** / template options — you only author the content above the footer.
+5. Test: create a new account → you receive the verification email.
+
+**2. Transactional/app emails — welcome, booking confirm, receipt, session synopsis, reminder** (built in code, Resend SDK):
+- Client provides the **Resend API key** → stored in `RESEND_API_KEY`.
+- `lib/email.ts` reads a template from the `email_templates` table + `org_config` (org name / from-address), fills `{{ placeholders }}`, and sends via the Resend SDK.
+- Integration hooks: `welcome` on registration; `booking_confirm` + `session_receipt` in the Stripe webhook; `session_synopsis` on session complete; `booking_reminder` via a cron-triggerable route.
+
+**Resolved:** The "sender must be on a verified Resend domain" prerequisite is met by step 1. If the dashboard SMTP test fails with a DNS/verification error, the domain is not yet verified in Resend.
 
 ---
 
@@ -517,7 +547,7 @@ This section captures decisions that span multiple modules. Revisit as you build
 |---|------------------------|---------------|-----------------|--------|
 | 1 | **Supabase project** (already provided — `cxwrvstojafdjqvelbno`) | Hosting the database, auth, storage, realtime | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | 🟢 |
 | 2 | **Enable "Confirm email"** in Supabase Auth → Providers → Email | Forces new users to verify their email address before signing in | Supabase dashboard (Authentication → Providers → Email → Confirm email) | 🟡 |
-| 3 | **Resend API key + verified sending domain** | Sends verification / password-reset emails | `RESEND_API_KEY` + a domain verified in Resend | 🟡 |
+| 3 | **Resend API key + verified sending domain** | Sends verification / password-reset emails | `RESEND_API_KEY` + a domain verified in Resend | 🟢 (API key provided; SMTP configured — confirm domain DNS verification) |
 | 4 | **Google OAuth credentials** (OAuth client ID + secret, authorized redirect URIs) | "Continue with Google" login button | Supabase dashboard (Authentication → Providers → Google) | 🟡 |
 | 5 | **Apple OAuth credentials** (Service ID, Team ID, Key ID + private key, domain) | "Continue with Apple" login button | Supabase dashboard (Authentication → Providers → Apple) | 🟡 |
 
@@ -568,8 +598,11 @@ Most of the super-admin portal is REAL and needs no client action (role-guarded 
 - **System notifications (email/SMS)** — the page is informational; actually sending needs **Resend** (Module 1) and **Twilio** (Module 6) — 🟡
 
 ### Module 11 — Content, Email & Marketing Templates
-Community rooms + crisis content management is REAL and needs no client action (admin-editable via `/admin/content`, shown live on `/community` and `/crisis`). Email **templates** are authorable by super-admin (module 11 section, `/super-admin/email-templates`). What's left is delivery, which all reuses **Resend** (Module 1):
-- **Resend API key + sender email** — enables verification email, booking confirmations, reminders, receipts, session synopsis (templates are ready; sending is wired to send once the key is provided) — ⬜
+Community rooms + crisis content management is REAL and needs no client action (admin-editable via `/admin/content`, shown live on `/community` and `/crisis`). Email **templates** are authorable by super-admin (module 11 section, `/super-admin/email-templates`). Delivery uses **Resend**:
+- **Resend API key** — provided by client → `RESEND_API_KEY` — ✅
+- **Supabase Auth SMTP → Resend** — configured in the dashboard (see **Email Delivery Setup**) for verification + password reset — ✅
+- **Verified Resend sender domain** — must be added + DNS-verified in Resend before SMTP can send (prerequisite; confirm the domain is verified if a dashboard SMTP test fails) — 🟡
+- **In-app transactional email sending** (welcome, booking, receipt, synopsis, reminder) — being wired via the Resend SDK in `lib/email.ts` — 🟡 (in progress)
 - **In-app notification center** — built (`notifications` table, `/notifications` inbox, navbar bell with unread badge, mark-read API) — no client credential — ✅
 
 ### Global / Platform

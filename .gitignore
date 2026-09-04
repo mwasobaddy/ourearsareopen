@@ -20,6 +20,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# client-provided secrets / key information (never commit)
+docs/KEY_INFORMATION.md
+docs/Key_information.docx
+
 # vercel
 .vercel
 
