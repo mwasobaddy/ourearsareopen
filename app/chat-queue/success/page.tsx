@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { QueueStatus } from "@/components/chat-queue/queue-status";
+import { getListenersAvailableCount } from "@/lib/session-ops";
 
 export const metadata: Metadata = {
   title: "In the Queue | Our Ears Are Open",
@@ -19,9 +20,11 @@ export default async function ChatQueueSuccessPage({ searchParams }: Props) {
     redirect("/chat-queue");
   }
 
+  const listenersAvailable = await getListenersAvailableCount();
+
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center gap-6 p-6">
-      <QueueStatus paymentId={paymentId} />
+      <QueueStatus paymentId={paymentId} listenersAvailable={listenersAvailable} />
     </div>
   );
 }

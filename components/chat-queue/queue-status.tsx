@@ -18,9 +18,24 @@ type QueuedRow = Database["public"]["Tables"]["queue_entries"]["Row"];
 
 type Props = {
   paymentId: string;
+  listenersAvailable?: number;
 };
 
-export function QueueStatus({ paymentId }: Props) {
+// Rough average chat-session length in minutes used to estimate how long a
+// single slot (one position) takes. Conservative by design.
+const AVG_SESSION_MINUTES = 15;
+
+function estimateWaitMinutes(position: number, listeners: number): string {
+  if (position <= 1) return "about 1 minute";
+  const capacity = Math.max(listeners, 1);
+  const minutes = Math.ceil(position / capacity) * AVG_SESSION_MINUTES;
+  if (minutes < 60) return `about ${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem > 0 ? `about ${hours}h ${rem}m` : `about ${hours} hours`;
+}
+
+export function QueueStatus({ paymentId, listenersAvailable = 1 }: Props) {
   const supabase = createClient();
   const [entry, setEntry] = useState<QueuedRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -218,6 +233,15 @@ export function QueueStatus({ paymentId }: Props) {
               {entry.position != null && entry.position > 0
                 ? `You are #${entry.position} in line.`
                 : "You're next in line."}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Estimated wait:{" "}
+              <span className="font-medium text-foreground">
+                {estimateWaitMinutes(
+                  entry.position ?? 1,
+                  listenersAvailable,
+                )}
+              </span>
             </p>
             <p className="max-w-md text-sm text-muted-foreground">
               A listener will be matched to you as soon as one is available.

@@ -252,7 +252,7 @@ Users pay minimum ($1) to join a live queue; the next available listener is assi
 - [x] `app/api/stripe/payment-intent/route.ts` widened to `type: "queue"` (min $1)
 - [x] Rewritten queue payment form (`chat-queue-donation-form.tsx`) → PaymentIntent → `PaymentForm` → `/chat-queue/success?payment=`
 - [x] "Listeners available now" stat for widget — `getListenersAvailableCount()` (counts `open_queue_enabled` listeners) wired into the `ChatQueueWidget` on `/community` and `/chat-queue`
-- [ ] **Queue estimated wait time** (from SCOPE 5.1/5.2) — realtime position ✓ but wait-time estimate not yet surfaced
+- [x] **Queue estimated wait time** (from SCOPE 5.1/5.2) — realtime position ✓ + dynamic estimate surfaced in `QueueStatus` (`estimateWaitMinutes(position, listenersAvailable)`: pos 1 → ~1min, else position × avg-session / available-listeners)
 - [ ] **Queue decline** (from SCOPE 5.3 / 7.5) — listener declines next customer with reason; only `queue/accept` exists today
 - [x] `app/api/queue/leave/route.ts` — mark my waiting/assigned entry `left`, free position; **Leave-queue** button in `QueueStatus`
 - [ ] Refund on leave / after abandonment policy
