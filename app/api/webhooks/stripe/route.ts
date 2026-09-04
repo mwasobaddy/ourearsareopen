@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  sendBookingConfirmationEmail,
+  sendSessionReceiptEmail,
+} from "@/lib/email";
 import Stripe from "stripe";
 
 export const runtime = "nodejs";
@@ -72,7 +76,7 @@ async function handleSucceeded(
   // Idempotency: if this payment is already recorded as succeeded, skip.
   const { data: existing } = await admin
     .from("payments")
-    .select("id, status, bookings_id, type")
+    .select("id, status, bookings_id, type, user_id, amount_cents, currency")
     .eq("stripe_payment_intent_id", pi.id)
     .maybeSingle();
 
@@ -103,6 +107,28 @@ async function handleSucceeded(
     })
     .eq("id", existing.id);
 
+  // Best-effort transactional emails (Resend). No-ops until RESEND_API_KEY is
+  // configured; never breaks the webhook if sending fails.
+  const payload = existing.type === "booking"
+    ? await loadEmailContext(admin, existing.user_id, existing.bookings_id)
+    : null;
+
+  if (payload) {
+    void sendBookingConfirmationEmail({
+      to: payload.email,
+      first_name: payload.firstName,
+      type: payload.type,
+      slot_start: payload.slotStart,
+      listener_name: payload.listenerName,
+    });
+
+    void sendSessionReceiptEmail({
+      to: payload.email,
+      first_name: payload.firstName,
+      amount: formatAmount(existing.amount_cents, existing.currency),
+    });
+  }
+
   // For paid bookings, confirm the booking once funds are captured.
   if (existing.type === "booking" && existing.bookings_id) {
     await admin
@@ -110,5 +136,68 @@ async function handleSucceeded(
       .update({ status: "confirmed", payment_intent_id: pi.id })
       .eq("id", existing.bookings_id)
       .eq("payment_option", "paid");
+  }
+}
+
+type EmailContext = {
+  email: string;
+  firstName: string;
+  type: string;
+  slotStart: string | null;
+  listenerName: string | null;
+};
+
+async function loadEmailContext(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  bookingsId: string | null,
+): Promise<EmailContext | null> {
+  try {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!profile?.email) return null;
+
+    let type = "conversation";
+    let slotStart: string | null = null;
+    let listenerName: string | null = null;
+
+    if (bookingsId) {
+      const { data: booking } = await admin
+        .from("bookings")
+        .select("type, slot_start, listener_id")
+        .eq("id", bookingsId)
+        .maybeSingle();
+      if (booking) {
+        type = booking.type;
+        slotStart = booking.slot_start;
+        if (booking.listener_id) {
+          const { data: listener } = await admin
+            .from("profiles")
+            .select("full_name")
+            .eq("id", booking.listener_id)
+            .maybeSingle();
+          listenerName = listener?.full_name ?? null;
+        }
+      }
+    }
+
+    const firstName = (profile.full_name ?? "").trim().split(/\s+/)[0] || "there";
+    return { email: profile.email, firstName, type, slotStart, listenerName };
+  } catch {
+    return null;
+  }
+}
+
+function formatAmount(cents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+    }).format(cents / 100);
+  } catch {
+    return `$ ${(cents / 100).toFixed(2)}`;
   }
 }

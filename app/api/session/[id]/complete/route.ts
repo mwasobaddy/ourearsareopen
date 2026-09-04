@@ -5,6 +5,7 @@ import {
   pauseListenerQueue,
   createNotification,
 } from "@/lib/session-ops";
+import { sendSessionSynopsisEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -94,5 +95,33 @@ export async function POST(
     link: "/profile",
   });
 
+  // Best-effort post-session synopsis email (Resend). No-op until
+  // RESEND_API_KEY is configured; never breaks the finalize flow.
+  await sendPostSessionEmail(admin, session.user_id, session.notes);
+
   return NextResponse.json({ session: updated, document });
+}
+
+async function sendPostSessionEmail(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  notes: string | null,
+) {
+  try {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", userId)
+      .maybeSingle();
+    if (!profile?.email) return;
+
+    const firstName = (profile.full_name ?? "").trim().split(/\s+/)[0] || "there";
+    await sendSessionSynopsisEmail({
+      to: profile.email,
+      first_name: firstName,
+      synopsis: notes,
+    });
+  } catch (err) {
+    console.error("sendPostSessionEmail failed:", err);
+  }
 }

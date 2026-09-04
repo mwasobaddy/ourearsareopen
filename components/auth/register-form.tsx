@@ -121,6 +121,13 @@ export function RegisterForm() {
       services_consent: values.consent,
     });
 
+    // Fire-and-forget welcome email (no-op until RESEND_API_KEY is set).
+    void fetch("/api/email/welcome", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: data.user.id }),
+    }).catch(() => {});
+
     // When email confirmation is enabled, no session is created until the
     // user verifies their email (data.session is null / no identities yet).
     const needsEmailConfirmation = !data.session && data.user.identities?.length === 0;
