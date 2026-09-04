@@ -525,6 +525,8 @@ This section captures decisions that span multiple modules. Revisit as you build
 - Integration hooks: `welcome` on registration; `booking_confirm` + `session_receipt` in the Stripe webhook; `session_synopsis` on session complete; `booking_reminder` via a cron-triggerable route.
 
 **Resolved:** The "sender must be on a verified Resend domain" prerequisite is met by step 1. If the dashboard SMTP test fails with a DNS/verification error, the domain is not yet verified in Resend.
+>
+> ⚠️ **Gotcha (2026-09):** A `*.vercel.app` (or other free auto-assigned) sender fails with `550 ... domain is not verified` because you do **not** control its DNS, so it can't be verified in Resend. A **real, DNS-controlled public domain** is required for sending to arbitrary recipients. Until one is provided, Resend's **sandbox sender** (`onboarding@resend.dev`, delivers only to the Resend account email) can be used to validate the SMTP pipeline. Full client guide: `docs/RESEND_EMAIL_SETUP_GUIDE.md`.
 
 ---
 

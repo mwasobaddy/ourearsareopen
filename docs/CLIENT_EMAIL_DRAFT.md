@@ -42,10 +42,11 @@ The site is deployed-ready; the remaining items are all **client-supplied integr
 - **How to get there:** Log in at [supabase.com](https://supabase.com) → your project (already shared) → Authentication → Providers.
 
 ### 2. Resend — email sending (verification, password reset, receipts, post-session synopsis, reminders)
-- **What:** An **API key** + a **verified sending domain**.
-- **How to get:** Sign up at [resend.com](https://resend.com) (free tier available), add and verify a domain you own (e.g. `ourearsareopen.com`), then create an **API Key** (Permissions: **Sending access**).
-- **Send us:** the API key + the from-address (they go in `RESEND_API_KEY`).
+- **What:** An **API key** + a **verified public domain** (DNS access required — the domain you control, e.g. `ourearsareopen.org`). Resend **will not** send from a `*.vercel.app`/free hostname.
+- **How to get:** Sign up at [resend.com](https://resend.com) (free tier available), **add + DNS-verify a domain you own**, then create an **API Key** (Permissions: **Sending access**).
+- **Send us:** the API key + the verified from-address (they go in `RESEND_API_KEY`).
 - **Notes:** Used by password reset, booking confirmations, session synopsis after every chat/phone, and 24h reminders.
+- 📄 **Follow the step-by-step guide:** see `docs/RESEND_EMAIL_SETUP_GUIDE.md` (buy/choose domain → add to Resend → paste DNS records → verify → update Supabase sender → test).
 
 ### 3. Stripe — payments
 - **What:** **Secret** + **publishable** API keys, a **webhook signing secret**, and the webhook endpoint registered.
