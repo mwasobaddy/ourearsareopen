@@ -454,9 +454,9 @@ Platform ownership: org config, feature flags, Stripe/billing config, role assig
 
 ## Module 11: Content & Marketing
 
-**Status:** 🟡 (content management real end-to-end; **email delivery being finalized** — Resend configured, in-app transactional email code being wired)
+**Status:** 🟡 (content management real end-to-end; **in-app transactional email sending scaffolded** — Resend configured, sending awaits a verified Resend sender domain)
 
-Community rooms, crisis content, and the email system. Content management is fully wired; email templates are authorable. Resend credentials have been provided by the client and Supabase Auth SMTP configured; in-app transactional email sending (welcome, booking, receipt, synopsis, reminders) is being built on the Resend SDK.
+Community rooms, crisis content, and the email system. Content management is fully wired; email templates are authorable. Resend credentials have been provided by the client and Supabase Auth SMTP configured; in-app transactional email sending (welcome, booking, receipt, synopsis, reminders) is **scaffolded and wired** on the Resend SDK (`lib/email.ts`) but **safely no-ops** until a **verified Resend sender domain** is provided.
 
 ### TO-DO
 - [x] `content_rooms` table + API + admin editing (migration `0016`) — public read / admin write (RLS via `is_admin()`)
@@ -468,7 +468,8 @@ Community rooms, crisis content, and the email system. Content management is ful
 - [x] `/super-admin/email-templates` editor (subject/body/description; placeholders documented) — ready for when Resend is configured
 - [x] **Resend configured** by client (API key in `RESEND_API_KEY`; Supabase Auth SMTP → Resend verified in dashboard) — see **Email Delivery Setup** below
 - [x] **In-app notification center** — built (`notifications` table, `/notifications` inbox, navbar bell with unread badge, mark-read API) — no client credential
-- [ ] In-app transactional email sending (Resend SDK): `welcome`, `booking_confirm`, `session_receipt`, `session_synopsis`, `booking_reminder` — **in progress** (`lib/email.ts` + hooks at register / stripe webhook / session-complete / cron)
+- [x] **In-app transactional email sending (Resend SDK):** `welcome` (register → `/api/email/welcome`), `booking_confirm` + `session_receipt` (Stripe webhook), `session_synopsis` (session complete), `booking_reminder` (`/api/email/reminders` 24h/15-min cron) — via `lib/email.ts`; sends no-op until `RESEND_API_KEY`
+- [ ] **Email actually delivering** — blocked until a **verified Resend sender domain** is provided (`.vercel.app` sender fails DNS verification). Until then the scaffold no-ops safely. See **Email Delivery Setup**.
 - [ ] Admin send-email / campaign (SCOPE 11.6 `POST /api/admin/send-email`, list segments) — ability to email team members and consumers (ongoing notices); not yet tracked/built
 
 ### Questions
@@ -479,7 +480,7 @@ Community rooms, crisis content, and the email system. Content management is ful
 2. `/admin/content` crisis section — edit a hotline's name/phone/availability or mark it primary; the public `/crisis` page updates (inactive resources hidden).
 3. Create a new room or crisis resource; it appears in the admin list and on the public page. Delete one and it disappears.
 4. Log in as a `super_admin` and open `/super-admin/email-templates` — author subject/body copy for each transactional template (saved to `email_templates`).
-5. **Auth email delivery is now LIVE** (verification + password reset) once Supabase Auth SMTP → Resend is configured (see **Email Delivery Setup**). In-app transactional emails (welcome, booking, receipt, synopsis, reminders) are wired via the Resend SDK in `lib/email.ts`.
+5. **Auth email delivery is now LIVE** (verification + password reset) once Supabase Auth SMTP → Resend is configured with a **verified sender domain** (see **Email Delivery Setup**). In-app transactional emails (welcome, booking, receipt, synopsis, reminders) are **scaffolded + wired** via the Resend SDK in `lib/email.ts` and no-op until `RESEND_API_KEY` + a verified domain are in place.
 
 ---
 
@@ -604,7 +605,7 @@ Community rooms + crisis content management is REAL and needs no client action (
 - **Resend API key** — provided by client → `RESEND_API_KEY` — ✅
 - **Supabase Auth SMTP → Resend** — configured in the dashboard (see **Email Delivery Setup**) for verification + password reset — ✅
 - **Verified Resend sender domain** — must be added + DNS-verified in Resend before SMTP can send (prerequisite; confirm the domain is verified if a dashboard SMTP test fails) — 🟡
-- **In-app transactional email sending** (welcome, booking, receipt, synopsis, reminder) — being wired via the Resend SDK in `lib/email.ts` — 🟡 (in progress)
+- **In-app transactional email sending** (welcome, booking, receipt, synopsis, reminder) — **scaffolded + wired** via the Resend SDK in `lib/email.ts` (`/api/email/welcome`, `/api/email/reminders`, Stripe webhook, session-complete); no-ops until `RESEND_API_KEY` — ✅ (wired)
 - **In-app notification center** — built (`notifications` table, `/notifications` inbox, navbar bell with unread badge, mark-read API) — no client credential — ✅
 
 ### Global / Platform
