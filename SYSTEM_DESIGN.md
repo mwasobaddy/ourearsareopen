@@ -367,7 +367,7 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 - [x] In-app notification center — `notifications` table, `/notifications` inbox, navbar bell with live unread badge, `POST /api/notifications/read` (mark read/all), and hooks fired on queue-assign + session-complete
 - [ ] Post-session email to consumer (synopsis + encouraging words) — automatic *(Blocked until Resend configured)*
 - [ ] Email/SMS reminders (24h, 15 min before session): 24h via Resend, 15-min via Twilio *(Blocked until client creds)*
-- [ ] No-show reported per-customer in admin reporting (metrics)
+- [x] No-show reported per-customer in admin reporting — `/admin/reports` shows a no-shows-this-month aggregate + a per-customer breakdown (tallied from `bookings.status = no_show`, repeat offenders highlighted, linking to each user)
 
 ### Questions
 - (none yet)
