@@ -253,7 +253,7 @@ Users pay minimum ($1) to join a live queue; the next available listener is assi
 - [x] Rewritten queue payment form (`chat-queue-donation-form.tsx`) → PaymentIntent → `PaymentForm` → `/chat-queue/success?payment=`
 - [x] "Listeners available now" stat for widget — `getListenersAvailableCount()` (counts `open_queue_enabled` listeners) wired into the `ChatQueueWidget` on `/community` and `/chat-queue`
 - [x] **Queue estimated wait time** (from SCOPE 5.1/5.2) — realtime position ✓ + dynamic estimate surfaced in `QueueStatus` (`estimateWaitMinutes(position, listenersAvailable)`: pos 1 → ~1min, else position × avg-session / available-listeners)
-- [ ] **Queue decline** (from SCOPE 5.3 / 7.5) — listener declines next customer with reason; only `queue/accept` exists today
+- [x] **Queue decline** (from SCOPE 5.3 / 7.5) — listener declines the next customer with a reason; `POST /api/queue/decline` marks the entry `declined` (new enum value), records `decline_reason`, frees the slot, notifies the consumer; Decline button + reason dialog in the team-member queue panel
 - [x] `app/api/queue/leave/route.ts` — mark my waiting/assigned entry `left`, free position; **Leave-queue** button in `QueueStatus`
 - [ ] Refund on leave / after abandonment policy
 - [ ] RLS: listeners see waiting pool; admins see all (customer sees own entry — done)

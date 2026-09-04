@@ -10,10 +10,12 @@ import {
   UserPlus,
   ArrowRight,
   Eye,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -58,6 +60,9 @@ export function QueuePanel() {
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [decliningId, setDecliningId] = useState<string | null>(null);
+  const [declineReason, setDeclineReason] = useState("");
+  const [declineSaving, setDeclineSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -144,6 +149,36 @@ export function QueuePanel() {
       setProfile(null);
     } finally {
       setProfileLoading(false);
+    }
+  }
+
+  async function handleDecline(entryId: string) {
+    const reason = declineReason.trim();
+    if (!reason) {
+      toast.error("Please add a reason before declining.");
+      return;
+    }
+    setDeclineSaving(true);
+    try {
+      const res = await fetch("/api/queue/decline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queue_entry_id: entryId, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't decline that consumer.");
+        setDeclineSaving(false);
+        return;
+      }
+      toast.success("Declined. This consumer has been notified.");
+      setDecliningId(null);
+      setDeclineReason("");
+      setDeclineSaving(false);
+      load();
+    } catch {
+      toast.error("Couldn't decline that consumer.");
+      setDeclineSaving(false);
     }
   }
 
@@ -251,6 +286,14 @@ export function QueuePanel() {
                       <Eye className="mr-2 h-4 w-4" />
                       View profile
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDecliningId(item.id)}
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Decline
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -325,6 +368,45 @@ export function QueuePanel() {
               No profile available.
             </p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={decliningId !== null} onOpenChange={(o) => !o && setDecliningId(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Decline this consumer</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Let the consumer know why, so we can help them connect another
+              way. The customer is gently notified with a way to rejoin.
+            </p>
+            <Textarea
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+              placeholder="e.g. At capacity, or not the right fit — we'll connect you with someone else."
+              rows={3}
+            />
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setDecliningId(null)}
+                disabled={declineSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => decliningId && handleDecline(decliningId)}
+                disabled={declineSaving || !declineReason.trim()}
+              >
+                {declineSaving && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Decline
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
