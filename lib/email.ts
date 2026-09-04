@@ -359,3 +359,33 @@ export async function sendFollowUpPaymentEmail(input: {
     ),
   });
 }
+
+/**
+ * Generic campaign/notice — used by the admin send-email surface to reach a
+ * segment of team members and consumers. Supports `{{ first_name }}`
+ * placeholders. Safe no-op when Resend isn't configured.
+ */
+export async function sendCampaignEmail(input: {
+  to: string;
+  subject: string;
+  body: string;
+  first_name?: string | null;
+}): Promise<SendResult> {
+  const { from, orgName, orgVars } = await loadOrg();
+  const vars: Record<string, string> = {
+    ...DEFAULT_VARS,
+    ...orgVars,
+    first_name: input.first_name ?? "there",
+  };
+  const resolvedSubject = render(input.subject, vars);
+  const resolvedBody = render(input.body, vars);
+  return sendEmail({
+    to: input.to,
+    from,
+    subject: resolvedSubject,
+    html: envelope(
+      orgName,
+      `<p>${resolvedBody.replace(/\n/g, "</p><p>")}</p>`,
+    ),
+  });
+}

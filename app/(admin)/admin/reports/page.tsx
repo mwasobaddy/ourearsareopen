@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAllListenerStats, HOURS_CAP } from "@/lib/admin-data";
+import { AdminCampaignDialog } from "@/components/admin/admin-campaign-dialog";
 
 export const metadata: Metadata = {
   title: "Reports | Admin — Our Ears Are Open",
@@ -101,6 +102,9 @@ export default async function AdminReportsPage() {
       <p className="text-muted-foreground">
         Live aggregates computed from real sessions, payments, and listeners.
       </p>
+      <div className="flex justify-end">
+        <AdminCampaignDialog />
+      </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatsCard

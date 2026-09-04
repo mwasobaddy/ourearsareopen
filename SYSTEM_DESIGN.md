@@ -454,7 +454,7 @@ Platform ownership: org config, feature flags, Stripe/billing config, role assig
 
 ## Module 11: Content & Marketing
 
-**Status:** 🟡 (content management real end-to-end; **in-app transactional email sending scaffolded** — Resend configured, sending awaits a verified Resend sender domain)
+**Status:** 🟡 (content management real end-to-end; **in-app transactional email sending + admin campaign email scaffolded** — Resend configured, sending awaits a verified Resend sender domain)
 
 Community rooms, crisis content, and the email system. Content management is fully wired; email templates are authorable. Resend credentials have been provided by the client and Supabase Auth SMTP configured; in-app transactional email sending (welcome, booking, receipt, synopsis, reminders) is **scaffolded and wired** on the Resend SDK (`lib/email.ts`) but **safely no-ops** until a **verified Resend sender domain** is provided.
 
@@ -470,7 +470,7 @@ Community rooms, crisis content, and the email system. Content management is ful
 - [x] **In-app notification center** — built (`notifications` table, `/notifications` inbox, navbar bell with unread badge, mark-read API) — no client credential
 - [x] **In-app transactional email sending (Resend SDK):** `welcome` (register → `/api/email/welcome`), `booking_confirm` + `session_receipt` (Stripe webhook), `session_synopsis` (session complete), `booking_reminder` (`/api/email/reminders` 24h/15-min cron) — via `lib/email.ts`; sends no-op until `RESEND_API_KEY`
 - [ ] **Email actually delivering** — blocked until a **verified Resend sender domain** is provided (`.vercel.app` sender fails DNS verification). Until then the scaffold no-ops safely. See **Email Delivery Setup**.
-- [ ] Admin send-email / campaign (SCOPE 11.6 `POST /api/admin/send-email`, list segments) — ability to email team members and consumers (ongoing notices); not yet tracked/built
+- [x] Admin send-email / campaign (SCOPE 11.6) — `GET /api/admin/email-segments` (list segments + recipient counts) + `POST /api/admin/send-email` (campaign/notice to customers, listeners, team, or everyone; emails no-op until a verified Resend domain, and recipients also get an in-app notification); **Send email** dialog on `/admin/reports`
 
 ### Questions
 - (none yet)
