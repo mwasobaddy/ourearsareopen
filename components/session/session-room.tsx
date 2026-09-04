@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -14,12 +15,14 @@ import {
   CheckCircle2,
   Timer,
   AlertTriangle,
+  CalendarPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -76,6 +79,16 @@ export function SessionRoom({ origin, refId }: Props) {
   const [endDialogOpen, setEndDialogOpen] = useState(false);
   const [endReason, setEndReason] = useState("");
   const [endDetails, setEndDetails] = useState("");
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpSlots, setFollowUpSlots] = useState<
+    { id: string; starts_at: string; ends_at: string }[]
+  >([]);
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpSlot, setFollowUpSlot] = useState<string>("");
+  const [followUpPaid, setFollowUpPaid] = useState(false);
+  const [followUpConcern, setFollowUpConcern] = useState("");
+  const [followUpSaving, setFollowUpSaving] = useState(false);
+  const [followUpDone, setFollowUpDone] = useState(false);
   const autoEndRef = useRef(false);
   const endingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -370,6 +383,65 @@ export function SessionRoom({ origin, refId }: Props) {
     }
   }
 
+  async function handleOpenFollowUp() {
+    if (!session) return;
+    setFollowUpOpen(true);
+    setFollowUpLoading(true);
+    setFollowUpSlot("");
+    setFollowUpPaid(false);
+    setFollowUpConcern("");
+    setFollowUpDone(false);
+    try {
+      const res = await fetch(
+        `/api/bookings/follow-up?session_id=${session.id}`,
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't load your available times.");
+        setFollowUpSlots([]);
+        return;
+      }
+      setFollowUpSlots(data.slots ?? []);
+    } catch {
+      toast.error("Couldn't load your available times.");
+      setFollowUpSlots([]);
+    } finally {
+      setFollowUpLoading(false);
+    }
+  }
+
+  async function handleSaveFollowUp() {
+    if (!session || !followUpSlot) return;
+    setFollowUpSaving(true);
+    try {
+      const res = await fetch("/api/bookings/follow-up", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: session.id,
+          slot_id: followUpSlot,
+          is_paid: followUpPaid,
+          concern: followUpConcern,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Couldn't schedule the follow-up.");
+        return;
+      }
+      setFollowUpDone(true);
+      toast.success(
+        followUpPaid
+          ? "Follow-up scheduled. The consumer will receive a payment link."
+          : "Free follow-up scheduled for the consumer.",
+      );
+    } catch {
+      toast.error("Couldn't schedule the follow-up.");
+    } finally {
+      setFollowUpSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -509,6 +581,15 @@ export function SessionRoom({ origin, refId }: Props) {
                 )}
                 Complete session
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleOpenFollowUp}
+                disabled={completing}
+              >
+                <CalendarPlus className="mr-2 h-4 w-4" />
+                Schedule follow-up
+              </Button>
             </div>
           </div>
         )}
@@ -613,6 +694,120 @@ export function SessionRoom({ origin, refId }: Props) {
               End Session
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={followUpOpen} onOpenChange={setFollowUpOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Schedule a follow-up</DialogTitle>
+            <DialogDescription>
+              Book a follow-up for this consumer. You won&apos;t handle any
+              payment — if it&apos;s a paid conversation, the consumer gets a
+              payment link by email.
+            </DialogDescription>
+          </DialogHeader>
+          {followUpDone ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">
+                Follow-up is scheduled. The consumer has been notified, and
+                your availability is updated.
+              </p>
+              <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3 text-muted-foreground">
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+                <span>
+                  {followUpPaid
+                    ? "Paid follow-up — a payment link was sent to the consumer's email."
+                    : "Free follow-up booked."}
+                </span>
+              </div>
+            </div>
+          ) : followUpLoading ? (
+            <div className="flex items-center justify-center gap-3 py-8 text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading your available times…
+            </div>
+          ) : followUpSlots.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              You have no open times available. Add availability in the{" "}
+              <Link href="/team-member/availability">Availability</Link> page
+              first.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label>Free or paid?</Label>
+                <RadioGroup
+                  value={followUpPaid ? "paid" : "free"}
+                  onValueChange={(v) => setFollowUpPaid(v === "paid")}
+                  className="flex gap-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="free" id="fu-free" />
+                    <Label htmlFor="fu-free" className="cursor-pointer font-normal">
+                      Free
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="paid" id="fu-paid" />
+                    <Label htmlFor="fu-paid" className="cursor-pointer font-normal">
+                      Paid — consumer gets a payment link
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Choose a time</Label>
+                <select
+                  value={followUpSlot}
+                  onChange={(e) => setFollowUpSlot(e.target.value)}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Select a time…</option>
+                  {followUpSlots.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {new Date(s.starts_at).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="fu-concern">Note for the consumer (optional)</Label>
+                <Textarea
+                  id="fu-concern"
+                  value={followUpConcern}
+                  onChange={(e) => setFollowUpConcern(e.target.value)}
+                  placeholder="e.g. Let's pick up where we left off…"
+                  rows={2}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setFollowUpOpen(false)}
+                  disabled={followUpSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveFollowUp}
+                  disabled={followUpSaving || !followUpSlot}
+                >
+                  {followUpSaving && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  <CalendarPlus className="mr-2 h-4 w-4" />
+                  Schedule follow-up
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </Card>

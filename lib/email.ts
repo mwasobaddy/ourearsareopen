@@ -322,3 +322,40 @@ export async function sendBookingReminderEmail(input: {
     html: envelope(orgName, `<p>${body.replace(/\n/g, "</p><p>")}</p>`),
   });
 }
+
+/**
+ * Follow-up payment link — sent to the consumer when a listener books a paid
+ * follow-up in-session. Carries ONLY a payment link (never exposes any
+ * payment details to the listener). Safe no-op when email isn't configured.
+ */
+export async function sendFollowUpPaymentEmail(input: {
+  to: string;
+  first_name: string;
+  slot_start: string | null;
+  payment_url: string;
+}): Promise<SendResult> {
+  const { from, orgName, orgVars } = await loadOrg();
+  const slot = input.slot_start
+    ? new Date(input.slot_start).toLocaleString(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "your scheduled follow-up";
+  const vars: Record<string, string> = {
+    ...DEFAULT_VARS,
+    ...orgVars,
+    first_name: input.first_name,
+    slot_start: slot,
+  };
+  const subject = `Complete your follow-up booking`;
+  const body = `Hi ${input.first_name}, your listener has scheduled a paid follow-up for ${slot}. Please complete payment here to confirm your slot: ${input.payment_url}`;
+  return sendEmail({
+    to: input.to,
+    from,
+    subject,
+    html: envelope(
+      orgName,
+      `<p>${body.replace(/\n/g, "</p><p>")}</p><p><a href="${input.payment_url}" style="display:inline-block;padding:10px 18px;background:#6d28d9;color:#fff;border-radius:8px;text-decoration:none;">Complete payment</a></p>`,
+    ),
+  });
+}

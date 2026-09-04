@@ -324,7 +324,7 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 - [x] **Debrief time** — completing a session pauses the listener's queue availability so they take a breather (re-enable manually)
 - [ ] Listener accounts: admin creates username; listener sets password on first login
 - [ ] Listener-only login + redirect to team portal
-- [ ] In-session follow-up booking; if paid → email payment link to consumer (listener never sees payment)
+- [x] In-session follow-up booking — `POST/GET /api/bookings/follow-up` + in-session "Schedule follow-up" dialog (free vs paid + the listener's own open slot); if paid → consumer emailed a payment link only (safe no-op until a verified Resend domain); 🔴 listener never sees payment
 - [ ] Start **voice** session from dashboard — 🔴 blocked (Twilio)
 
 ### Questions
@@ -337,7 +337,7 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 4. `/team-member/availability` loads and saves the weekly schedule to `profiles.availability`.
 5. `/team-member/dashboard` shows weekly/monthly hours computed from the listener's completed sessions, the 15 hr/week capacity bar, and today's confirmed appointments with Open Chat/Start Call.
 6. The 15 hr/week cap is now **enforced** in `queue/toggle`, `queue/accept`, and `session/open` (blocked with a clear message near the cap). Completing a session pauses the listener's queue availability (debrief pause); they re-enable it manually.
-7. Remaining items (listener provisioning via username+first-login password, in-session follow-up/paid email link, voice) are pending; voice additionally needs Twilio creds.
+7. Remaining items (listener provisioning via username+first-login password, voice) are pending; voice additionally needs Twilio creds. In-session follow-up booking is wired; the paid email link only sends once a verified Resend domain is configured.
 
 ---
 
@@ -586,6 +586,7 @@ Core portal is REAL (queue toggle/pool/accept, weekly availability, dashboard **
 ### Module 8 — Session & Call Management
 Core lifecycle is REAL (**chat sessions, listener notes + Complete flow, auto-created session-notes documents, listener `/team-member/sessions` history, customer Documents tab, 15-min session timing with 14-min warning + auto-end + extend, safety-disconnect with recorded reason, no-show handling, booking reschedule, session-notes Download/Print, leave-queue, real listeners-available counts, in-app notifications**) — no client action needed for those. Remaining items block on the integrations above:
 - **Post-session synopsis email** (auto after a session completes) — needs **Resend** configured (Module 1) — ⬜
+- **Paid in-session follow-up → payment-link email** (route wired; the paid email only actually sends once Resend has a verified domain) — needs **Resend** — ⬜
 - **Email/SMS reminders** (24h via Resend, 15-min SMS via Twilio) — needs **Resend** + a **Twilio SMS-capable number** (Module 6) — ⬜
 - **Voice** phone sessions from the session room — needs **Twilio** (Module 6) — ⬜
 
