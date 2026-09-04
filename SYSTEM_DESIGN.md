@@ -120,7 +120,7 @@ Completes the user's profile after signup (the `/profile/setup` wizard), persona
 - [x] Fixed infinite-recursion in `admins_read_all_profiles` via `is_admin()` SECURITY DEFINER helper (migration `0005`)
 - [x] End-to-end verified: signup trigger → profile read → full update → avatar upload → delete account (via admin-created confirmed test user)
 - [x] Assigned listener UI — the profile "Personal Information" tab shows the customer's assigned listener name when one is set (`profiles.assigned_listener_id`)
-- [ ] Assigned-listener assignment API (SCOPE 2.4 `GET/PATCH /api/users/me/assigned-listener`) — display is done, but there is no admin route to actually set/clear a customer's `assigned_listener_id`
+- [x] Assigned-listener assignment API — admin/super-admin sets or clears a customer's `assigned_listener_id` via `GET/PATCH /api/admin/assigned-listener`; admin UI control on the user detail page (validates target is a customer and the value, when set, is an active listener). (SCOPE maps to `PATCH /api/users/me/assigned-listener`, built as an admin route here.)
 - [ ] `isProfileComplete` client-side shortcut / booking-route guard wiring (deferred to Module 3)
 
 ### Questions

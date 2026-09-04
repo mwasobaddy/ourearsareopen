@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/admin-auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ToggleActiveButton } from "@/components/admin/listener-actions";
+import { AssignedListenerControl } from "@/components/admin/assigned-listener-control";
 
 export const metadata: Metadata = {
   title: "User Detail | Admin — Our Ears Are Open",
@@ -28,7 +29,7 @@ export default async function AdminUserDetailPage({
   } = await admin
     .from("profiles")
     .select(
-      "id, full_name, email, role, is_active, created_at, country, age_range, reason",
+      "id, full_name, email, role, is_active, created_at, country, age_range, reason, assigned_listener_id",
     )
     .eq("id", id)
     .maybeSingle();
@@ -42,6 +43,24 @@ export default async function AdminUserDetailPage({
         </Button>
       </div>
     );
+  }
+
+  // Active listeners available to assign, plus the currently assigned one.
+  const { data: listeners } = await admin
+    .from("profiles")
+    .select("id, full_name")
+    .eq("role", "listener")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  let currentListenerName: string | null = null;
+  if (profile.assigned_listener_id) {
+    const { data: al } = await admin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", profile.assigned_listener_id)
+      .maybeSingle();
+    currentListenerName = al?.full_name ?? null;
   }
 
   const { data: sessions } = await admin
@@ -119,6 +138,19 @@ export default async function AdminUserDetailPage({
               <p className="font-medium">
                 {new Date(profile.created_at).toLocaleDateString()}
               </p>
+            </div>
+            <div className="border-t border-border pt-4">
+              <p className="text-sm text-muted-foreground">
+                Assigned listener
+              </p>
+              <div className="mt-2">
+                <AssignedListenerControl
+                  customerId={profile.id}
+                  currentListenerId={profile.assigned_listener_id}
+                  currentListenerName={currentListenerName}
+                  listeners={listeners ?? []}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
