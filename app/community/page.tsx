@@ -278,7 +278,7 @@ export default async function CommunityPage() {
                     &ldquo;{room.recentTopic}&rdquo;
                   </div>
 
-                  <Link href="/register" className="mt-4 w-full">
+                  <Link href={`/community/${room.id}`} className="mt-4 w-full">
                     <Button
                       variant="outline"
                       size="sm"
