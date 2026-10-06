@@ -1,5 +1,5 @@
 -- ============================================================
--- 0019_booking_assignment.sql
+-- 0020_booking_assignment.sql
 -- Module 3 (follow-up): scheduled-booking listener assignment.
 --
 -- Context: `bookings.listener_id` existed but was never written by any code
@@ -28,6 +28,7 @@ create index if not exists bookings_listener_status_idx
 -- Listeners may read *open* booking requests (confirmed, unassigned, future)
 -- so they can review and accept them, mirroring the queue pool. The customer's
 -- concern text is intentionally visible here — it is the matching brief.
+drop policy if exists "listener_read_open_bookings" on public.bookings;
 create policy "listener_read_open_bookings"
   on public.bookings for select
   using (
@@ -38,6 +39,7 @@ create policy "listener_read_open_bookings"
   );
 
 -- Customers see who they are matched with once assigned.
+drop policy if exists "customers_read_assigned_listener" on public.profiles;
 create policy "customers_read_assigned_listener"
   on public.profiles for select
   using (
