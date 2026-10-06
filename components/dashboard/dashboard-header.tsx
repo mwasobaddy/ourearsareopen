@@ -35,6 +35,8 @@ interface DashboardHeaderProps {
   };
   backToLabel?: string;
   backToHref?: string;
+  /** Extra slot rendered at the far right of the header (portals pass a Log out link). */
+  userMenu?: React.ReactNode;
 }
 
 function Breadcrumb({ items }: { items: NavItem[] }) {
@@ -76,6 +78,7 @@ export function DashboardHeader({
   user,
   backToLabel,
   backToHref,
+  userMenu,
 }: DashboardHeaderProps) {
   return (
     <header className="flex h-16 shrink-0 items-center gap-4 border-b border-border bg-background px-6">
@@ -142,6 +145,7 @@ export function DashboardHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+      {userMenu}
     </header>
   );
 }
