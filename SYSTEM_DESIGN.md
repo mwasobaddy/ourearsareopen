@@ -413,7 +413,7 @@ Operations portal: listener management, session oversight, reports, content, ref
 - [x] Reports: sessions, revenue, new customers, listener utilization (users + hours/cap) — live aggregates
 - [x] Refunds + support: `support_tickets` table (refund/support, status, internal notes) + create/resolve via API
 - [x] `is_active` column + `support_tickets` table (migration `0014`) + RLS (admins only)
-- [~] Listener provisioning (auth user + first-login password) — blocked until client enables Supabase password auth + email
+- [~] Listener provisioning (auth user + first-login password) — blocked until client enables Supabase password auth + email. The "first-login password" step has no implementation: `POST /api/admin/listeners` creates a passwordless auth user and no invite is sent, so credentials are shared manually. Tracked properly in **Module 12** (hire action → `inviteUserByEmail`)
 - [x] Content: `content_rooms` + `content_crisis` tables with admin editors — delivered in **Module 11** (`/admin/content`), site-wide copy via Module 10 `org_config`
 - [ ] Email tools (verify on signup, post-session synopsis, receipts) — blocked until Resend (see client checklist)
 
@@ -429,7 +429,7 @@ Operations portal: listener management, session oversight, reports, content, ref
 6. `/admin/users` — real consumers; search by name/email; view profile; deactivate/reinstate.
 7. `/admin/reports` — sessions, revenue, new customers, utilization computed live from real data.
 8. `/admin/support` — create a refund/support ticket (persists to `support_tickets`); resolve/reopen works.
-9. Blocked items: Stripe refund issuance (needs Stripe keys), listener auth user (needs Supabase password/email). Community-rooms content is now served by **Module 11** (`/admin/content` → `/community` / `/crisis`).
+9. Blocked items: Stripe refund issuance (needs Stripe keys), listener auth user (needs Supabase password/email). Note: a listener added here cannot set their own password yet — see **Module 12**. Community-rooms content is now served by **Module 11** (`/admin/content` → `/community` / `/crisis`).
 
 ---
 
@@ -496,12 +496,94 @@ Community rooms, crisis content, and the email system. Content management is ful
 
 ---
 
+## Module 12: Recruitment & Hiring (Job Postings → Application → Hire)
+
+**Status:** ⚪ Not Started (advertising copy exists; **application capture is missing — nothing an applicant submits is ever received**)
+
+> **Scope note:** applicant tracking was **never in `docs/SCOPE_OF_WORK.md`**. Module 9.2 (`:141`, `:742`) scoped hiring as *"add or remove team members in backend"* only. `/join-team` and `/workforce-apply` were carried over from the frontend prototype, where every form was decorative — so the advertising half was built and the receiving half never was. This module is **new scope**, not a bug fix, and is documented here so it is agreed before any code is written.
+
+Recruitment pipeline: publish a role → apply → review → interview → offer → hire (1099 onboarding).
+
+### Current state — what exists
+- [x] `/join-team` "Open Positions" (`#open-roles`) — six role cards rendered from a **hardcoded array** (`app/join-team/page.tsx:55-104`): Therapists, Licensed Therapists, Counselors, Community Outreach Manager, Social Media Management, Team Communication Member. Shows department / type / location badges + the 1099 terms ($10.99 per conversation, headsets, training, weekly pay)
+- [x] `/workforce-apply` — full application UI (name, email, résumé upload, one-minute video link/upload, written intro)
+- [x] `/volunteer` — volunteer application UI
+- [x] `/admin/listeners/new` + `POST /api/admin/listeners` — create a team member (auth user + `profiles.role = 'listener'`)
+- [x] Admin nav: Dashboard, Listeners, Bookings, Sessions, Users, Content, Reports, Support
+
+### Gaps — 🔴 blockers (the process stops here today)
+- [ ] **`/workforce-apply` submits nowhere.** `app/workforce-apply/page.tsx:110` is `<form className="space-y-5">` — no `action`, no `onSubmit`, not a client component. Submitting does a GET navigation back to the same URL and **discards every field including the résumé and video file**. The page re-renders as if nothing happened; there is no confirmation and no error
+- [ ] **`/volunteer` has the identical defect** — `app/volunteer/page.tsx:62`, same bare `<form>`
+- [ ] **No `applications` table** in any migration — nowhere to record an application or its files
+- [ ] **No application API route** — nothing accepts the submission
+- [ ] **No file storage for applications** — only the `avatars` bucket exists; nowhere for a résumé or intro video
+- [ ] **No confirmation to the applicant, no notification to admins** — a prepared applicant believes they applied when nothing reached either side
+- [ ] **No admin review surface** — nothing lists applicants, so applications are invisible to the business
+- [ ] **New hires cannot sign in.** `POST /api/admin/listeners` creates the auth user with `email_confirm: true` and **no password**; `inviteUserByEmail` / `generateLink` appear nowhere in the codebase. `/admin/listeners/new` promises *"They will set their password on first sign-in"* — that flow does not exist, so the admin must hand over credentials out of band
+
+### Gaps — 🟡 high
+- [ ] **No role identity on the application.** Every "View & Apply" is a bare `<Link href="/workforce-apply">` (`join-team/page.tsx:268`, plus the "Fill out the form" link at `:282`) — no opening id in the URL or query. The form has no role/position field, only a hidden `applicationType=workforce` that nothing reads, so six job adverts would produce one undifferentiated pile
+- [ ] **The role enum cannot express the advertised roles.** `public.user_role` is `customer | listener | admin | super_admin` (`0001_auth_users.sql:55`). Therapists, Licensed Therapists, Counselors, Outreach Manager and Social Media all collapse to `listener` — no credential field, licence number, issuing state or expiry anywhere
+- [ ] **No status pipeline, no interview step, no reviewer notes** — `submitted → screening → interview → offer → hired/rejected` does not exist
+- [ ] **No applicant-facing status** — applicants cannot see where they stand, so "did you get my application?" lands with the business
+- [ ] **"Training provided" is advertised on three pages** (`join-team`, `workforce-apply`, `volunteer`) with **no training module** and no way to record that someone completed it
+
+### Gaps — 🟡 medium
+- [ ] **Roles are hardcoded in a page component** — cannot be added, edited, closed, or dated without a code deploy; no open/closed state, applicant count, salary, requirements, posted date, or deadline; no per-role detail page
+- [ ] **No 1099 agreement, W-9, or consent record** — the `documents` table has a `consent` type that nothing writes
+- [ ] **No background-check record** for any role
+- [ ] **No offboarding record** — `is_active` toggles access, but there is no exit reason, date, or note (Module 9 covers deactivation only)
+- [ ] **"Team Communication Member" duplicates the listener path** — the same hero offers "View Open Positions", "Sign Up as Volunteer" and "Become a Listener", so the advert list mixes paid clinical roles, a comms role and the direct-support listener job
+
+### Interim workaround (no code — recommended while this is unscheduled)
+- [ ] Put a free external form (e.g. Google Form) behind "View & Apply" and "Sign Up to Volunteer" so applications arrive by email today, with a spreadsheet tracking each person's stage. Files live with the provider and there is no status tracking — a genuine stopgap, replaced by the work below.
+
+### Proposed build — awaiting client confirmation, NOT started
+- [ ] `job_openings` table (title, department, employment type, location, pay, description, responsibilities, requirements, status open/closed, posted_at, closes_at) + RLS; `/join-team` renders from it; super-admin CRUD at `/super-admin/jobs`
+- [ ] Per-opening detail page + `/workforce-apply?opening=<id>` so the applied-for role is always known; free-text "no suitable role" path retained
+- [ ] `applications` table (opening_id nullable, `type` workforce/volunteer, full_name, email, phone, resume_path, intro_video_path, intro_text, `status` submitted/screening/interview/offer/hired/rejected, reviewer notes, reviewed_by, reviewed_at, created_at) + RLS (admins all; a signed-in applicant reads only their own)
+- [ ] Private `applications` storage bucket for résumés and intro videos (service-role upload, no public URLs)
+- [ ] `POST /api/applications` + real client form (validation, file limits/types, honeypot + rate limiting)
+- [ ] Applicant confirmation email with a reference number, plus an in-app/email notification to admins (reuses `lib/email.ts` + `createNotification`)
+- [ ] `/admin/applicants` pipeline — filter by status/role/opening, read the résumé, advance status, record a rejection reason, audit-logged
+- [ ] Applicant status page at `/application/status?token=<signed>` — read-only progress, no account needed
+- [ ] Hire action: `POST /api/admin/applicants/[id]/hire` → `assignBookingToListener`-style role promotion + `inviteUserByEmail` so the new team member sets their own password; replaces the manual credential handover
+- [ ] Role/credential support: `listener` specialisations (clinical / outreach / comms) + licence number, issuing state, expiry, verified flag on `profiles`; surfaced on `/admin/listeners/[id]`
+- [ ] 1099 agreement + consent captured as `documents` rows (existing `document_type` values `consent` / `other`), downloadable by the applicant and staff
+- [ ] Training tracker: `training_modules` + per-listener completion, so "training provided" becomes verifiable
+- [ ] Offboarding: deactivate with a recorded reason/date on the profile
+- [ ] Optional: auto-close an opening once hired; weekly digest of new applicants to admins
+
+### Questions
+- ❓ Confirm the six advertised roles as they stand, or combine/remove some (Therapists vs Licensed Therapists vs Counselors overlap heavily)
+- ❓ Should volunteer applications run through the same stages, or a lighter track (received → contacted → active volunteer)?
+- ❓ Should applicants see their own status, or stay private for now?
+- ❓ Should an opening auto-close when someone is hired?
+- ❓ Are licensed roles genuinely separate from `listener`, or is one `listener` role with a "licensed" flag enough? (Affects whether the enum changes or a specialisation column is added.)
+- ❓ Who reviews applications — one admin, or several with notes visible to each other?
+- ❓ Background checks: required for any role, and who performs them?
+
+### How to test — Module 12
+_(Not applicable until this module is built. The steps below are the acceptance checks to run once it is.)_
+1. Open `/join-team#open-roles` — roles come from the database; closing an opening at `/super-admin/jobs` removes it from the public list without a deploy
+2. Click **View & Apply** on one role → the detail page and the apply form both carry that opening id
+3. Submit the form with a résumé file → a row appears in `applications` with the correct `opening_id`, and the file is retrievable from the private bucket by staff and by the applicant only
+4. Reload the page → the application is gone from the form (no double submit); no application row is created by an empty submit
+5. The applicant receives a confirmation email with a reference number; admins receive a notification; the applicant appears in `/admin/applicants`
+6. Move the applicant New → Looking at → Interview → Offer → Hired; each step emails the applicant and appears in their status page
+7. Open `/admin/applicants` as an `admin`, then as a `listener` (redirected), then logged out (redirected); a customer can read only their own application
+8. Reject with a reason → the applicant sees the reason on their status page and admins see who rejected it and when
+9. Press **Hire** → the profile becomes `listener` (or the specialisation), the new hire receives a password-set email, and can sign in without the admin sharing any credential
+10. Re-submit the same form repeatedly → rate limited, and no duplicate rows appear
+
+---
+
 ## Cross-Module Decisions & Architecture Notes
 
 This section captures decisions that span multiple modules. Revisit as you build.
 
 - [ ] Confirm realtime approach: Supabase Realtime for chat/queue; Twilio or LiveKit for voice
-- [ ] Confirm file storage: Supabase Storage buckets (`avatars`, `documents`)
+- [ ] Confirm file storage: Supabase Storage buckets (`avatars`, `documents`; `applications` planned in **Module 12**)
 - [x] Confirm email provider: **Resend** — auth emails via **Supabase Auth custom SMTP → Resend**; transactional/app emails via the **Resend SDK** in `lib/email.ts` (see **Email Delivery Setup** below)
 - [ ] Confirm RLS is the primary authorization mechanism everywhere
 - [ ] Confirm Next.js API routes used only for server-secret glue (Stripe/Twilio/webhooks)
