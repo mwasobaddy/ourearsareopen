@@ -720,7 +720,7 @@ Whether people who need this service can find it through Google, a shared link, 
 - [ ] **No `title.template`** in the root layout — every page hand-writes the `| Our Ears Are Open` suffix instead of inheriting it, so nothing is enforced centrally
 - [ ] **Legacy `keywords` array** in `app/layout.tsx:16-23` — a dead field Google has ignored since 2009. Harmless today (no page repeats it) but it should be removed so it isn't mistaken for an SEO lever
 - [ ] **Double `<h1>` on every portal page** — `components/dashboard/dashboard-header.tsx` renders the portal name as `<h1>` and each page adds its own, so `/team-member/queue` has "Team Member Portal" *and* "Chat Queue". Broken heading hierarchy (also an a11y issue)
-- [ ] **8 routes export no `metadata`** and silently inherit the root title/description: `app/page.tsx` (homepage), `app/community/[slug]`, `app/book-session`, `app/listener`, `app/workforce`, and the three portal index pages. The **homepage** inheriting "Our Ears Are Open | Compassionate Listening Support" is survivable, but a dynamic community slug page with no per-slug description/OG image is a missed share
+- [ ] **8 routes carry no `metadata`** and inherit the root title/description: `app/page.tsx` (homepage), `app/book-session`, `app/listener`, `app/workforce`, and the three portal index pages. (`app/community/[slug]` is **not** among them — it exports `generateMetadata` and builds a correct per-slug title + description; it is still missing an OG image, as is every other route.)
 
 ### Gaps — not yet measured
 - [ ] **Core Web Vitals unmeasured.** Lighthouse here excludes performance. For a service aimed at elderly users, crisis traffic, and low-end Android devices, **LCP and INP matter more than the 91**. Needs a real field measurement (Vercel Speed Insights or `web-vitals` reporting to an endpoint), not a lab score
@@ -732,7 +732,7 @@ Whether people who need this service can find it through Google, a shared link, 
 - [ ] `metadataBase` on the root layout + `alternates.canonical` per page
 - [ ] **Open Graph + Twitter card metadata** with a purpose-built 1200×630 share image (`app/opengraph-image.tsx` generated via `next/og`, brand colours from `--primary`/`--brown`), plus `metadata.icons` wiring the existing `public/apple-icon.png` / `icon.svg` so the favicon stops 404ing
 - [ ] **JSON-LD**: `Organization` + `LocalBusiness` sitewide, `JobPosting[]` generated from the `job_openings` table (depends on **Module 12**), `BreadcrumbList`, `WebSite`
-- [ ] `title.template: "%s | Our Ears Are Open"` in the root layout; add metadata to the 8 uncovered routes, starting with the homepage and `community/[slug]` (per-slug description + OG image)
+- [ ] `title.template: "%s | Our Ears Are Open"` in the root layout; add metadata to the 7 uncovered routes, starting with the homepage; add a per-slug OG image to `community/[slug]`
 - [ ] Replace the 5 "Learn More" anchors with descriptive text (and sweep the rest of the site for the same pattern)
 - [ ] Gate `/team-member/*` in `middleware.ts` alongside `/admin` + `/super-admin`, and add `robots: { index: false }` to all three portals
 - [ ] Fix the double-`h1`: `dashboard-header.tsx` portal title becomes a non-heading element
@@ -760,6 +760,82 @@ _(Not applicable until this module is built. The steps below are the acceptance 
 8. Every public page has exactly one `<h1>` and a unique `title`; no two pages share a description
 9. Lighthouse SEO re-run scores 100 and `robots-txt` / `canonical` now report as applicable passes (not `notApplicable`)
 10. Field Core Web Vitals (LCP/INP/CLS) are being collected and visible in the admin view, with p75 trending in the "good" band
+
+---
+
+## Module 15: Community Rooms (Group Support)
+
+**Status:** 🟡 (real, admin-managed room *content* ships; **the rooms do not exist, and the page presents invented activity as real**)
+
+> **Scope note:** `docs/SCOPE_OF_WORK.md` scopes community rooms **as content only** — `:145` "Content: community rooms (edit titles, descriptions, order)", `:162` "Community rooms content API and admin editing", `:202` Module 11 "Community rooms copy". **Group chat / group messaging was never scoped at any point**; the only messaging in scope is 1:1 session chat (`:177`, Module 6) and the queue (Module 5). That content half is **delivered**. The invented member counts, invented testimonials and "create your own community" copy are prototype leftovers from a design that assumed group chat would exist. Splitting the module in two: **15A** is a trust problem to fix now; **15B** is a feature that needs a decision before it is costed.
+
+### How it works today
+1. Admin manages room titles/descriptions/order at `/admin/content` → `content_rooms` (migration `0016`, public read + `is_admin()` write, via `GET/POST/PATCH/DELETE /api/admin/content/rooms`). **8 active rooms** in the live project, all with real copy.
+2. `/community` lists the active rooms, plus a one-on-one support widget whose `listenersAvailable` figure is **real** (`profiles.open_queue_enabled` via `getListenersAvailableCount()`), pointing at the working `/book-listener` and `/chat-queue`.
+3. "Enter Room" → `/community/[slug]`, which shows the real title/description, `notFound()`s on an unknown or inactive slug, and exports `generateMetadata` for per-slug SEO title/description.
+4. The room page then states **"Community rooms are coming soon"** and offers the 1:1 alternatives. There is no group chat.
+
+### Gaps — 🔴 trust (fix regardless of any build decision)
+- [ ] **Invented member counts presented as fact.** `DEFAULT_ROOM_META` is a hardcoded map in **two** files (`app/community/page.tsx:50-59`, `app/community/[slug]/page.tsx:37-61`) giving all 8 rooms member counts and "online" counts. They sum to **847 members** and **82 online**, and the hero renders that total as **"82 people active right now"** behind an animated live-pulse dot. Verified in the production HTML on 2026-10-06 (`\"82\",\" people active right now`). A visitor — including one in distress deciding whether this space is populated — is shown a fabricated headcount
+- [ ] **Invented member testimonials.** The "Wins Being Shared Right Now" feed (`app/community/page.tsx:61-92`) is a hardcoded array of five first-person posts about mental-health wins, with fabricated relative timestamps ("2 min ago", "5 min ago" …). Verified verbatim in production: *"Finally said no to overtime this week. Small win but it felt huge!"*, *"Got the job I've been hoping for — had to share with people who get it!"*, *"Day 30 of my morning routine…"*. **Publishing invented member quotes as real activity on a mental-health service is the most damaging defect in this module** — it undermines the credibility of every genuine member post later, and a visitor who recognises the fiction may distrust the service entirely
+- [ ] **Two divergent copies of the same fabricated data.** Any edit to one `DEFAULT_ROOM_META` desynchronises the directory and the room page
+
+### Gaps — 🔴 15B: group chat does not exist
+- [ ] No room-scoped messaging — `messages` is bound to `session_id`, so there is no table a room conversation could live in
+- [ ] No membership: no join, no leave, no member list, no roles, no capacity, no private/invite rooms
+- [ ] No presence — "online" cannot be real until members exist, which is why it was faked
+- [ ] No room history persistence, search, unread counts, or reply/mention notifications (the notification center exists — `createNotification` — and is simply not wired to rooms)
+
+### Gaps — 🟡 safety promises with no mechanism behind them
+- [ ] The page advertises a **"safe, moderated space (18+)"** and publishes "Keep it Safe" guidelines, but there is **no moderation of any kind**: no report/flag, no block or mute, no rate limiting, no profanity or self-harm filter, no moderator queue, no audit trail. Nothing sits between a member and a room
+- [ ] **No age verification.** "18+ only — legal minimum age" is asserted in the hero and guidelines, but nothing captures or checks a date of birth at registration or at join (same gap as the contact form in **Module 13**). The site states this as a *legal minimum*, which makes it a compliance question, not just a UX one
+- [ ] **No crisis path inside a room.** `/crisis` exists and is one click away sitewide, but a group room has no safety-netting notice, no self-harm keyword detection with an automatic pointer to 988, and no "report this person" escape hatch. Group chat multiplies this risk well beyond the 1:1 session room, which at least has a listener present and an end-reason safety review trail
+- [ ] **"Create your own community" is advertised but unsupported.** The hero promises it twice ("create your own community", "Join Community"); only admins can create rooms, and a member who tries has no path at all
+
+### Gaps — 🟡 medium
+- [ ] No analytics on `/community` — no way to know whether the section is used before investing in it
+- [ ] Rooms are all public and always-open; no scheduled sessions, no host-present hours, no listener-moderated rooms
+- [ ] No policy for message retention, deletion on request, or what happens when a member asks for their posts to be removed — a real obligation once other people's words are published
+
+### Immediate recommendation (15A — no dependencies, no client decision needed)
+- [ ] Take the fabricated numbers and invented testimonials down now. Either remove them, or — if the design intent was to show what the space will look like — label them unambiguously as examples ("Example of what members share") rather than as activity
+- [ ] Replace "82 people active right now" with the honest, already-real signal: the live listener count and current wait estimate
+- [ ] Keep the room directory (it is real and useful as an index of topics we can support) and keep the 1:1 CTAs, which work end-to-end
+- [ ] Collapse the duplicated `DEFAULT_ROOM_META` into one module, or delete it
+
+### Proposed build — 15B, NOT started and NOT costed pending the questions below
+- [ ] `community_room_members` (room_id, user_id, role member/moderator, status active/muted/left/banned, joined_at, last_seen_at) + RLS
+- [ ] `community_messages` (room_id, sender_id, body, created_at, edited_at, deleted_at, flagged_at, hidden_at) + RLS (members read, members insert own, moderators/admins manage)
+- [ ] Realtime per room, reusing the proven `sessions`/`messages` pattern (`postgres_changes` + presence), so "online" becomes a real number
+- [ ] `/community/[slug]` becomes the real room: message list, composer, join/leave, member list, unread badge, history
+- [ ] **Moderation as a first-class feature**: `community_reports` queue at `/admin`, per-message remove, mute/ban, slow mode, and a keyword filter whose matches trigger a safety-netting reply pointing to `/crisis` and 988
+- [ ] Age gate at join (self-declared date of birth) to back the 18+ claim
+- [ ] Room creation: admin-only with a "request a room" form for members, or member-created with moderation — decide first
+- [ ] Wire replies/mentions into the existing notification center
+- [ ] Room-level reports + an admin moderation dashboard with an audit trail
+
+### Questions
+- ❓ **Is group chat actually wanted for launch, or is 1:1 (booking + queue) sufficient?** This is the whole module: it is the difference between a week and a month of work, and moderation is an *ongoing operational commitment*, not a build.
+- ❓ **Who moderates, and how many hours a day?** If nobody is rostered, the honest recommendation is not to open group chat and to leave the rooms as a directory of topics.
+- ❓ Account-only, or allow anonymous posting? Account-only is far easier to moderate and to remove.
+- ❓ Self-declared date of birth at join, or an 18+ checkbox? Given "legal minimum age" is stated publicly, confirm what is actually required for an LLC in Florida.
+- ❓ Public rooms only, or private/invite rooms?
+- ❓ Should a trained listener moderate or host rooms, or is this peer-only support?
+- ❓ Message retention and deletion-on-request policy, before any member words are published?
+- ❓ Should the invented testimonials be replaced with **real** member quotes (with consent) once the space is genuinely used — which would also make the section honest and persuasive?
+
+### How to test — Module 15
+_(15A can be verified now; the 15B steps apply once built.)_
+1. `/community` and every `/community/<slug>` show no fabricated member count, online count, or member quote; any illustrative content is visibly labelled as such
+2. The live "people active" figure is derived from real data (listener availability) and changes when a listener toggles availability
+3. `curl -s https://<domain>/community` contains no hardcoded testimonial strings
+4. An unknown or deactivated slug returns 404; an active one renders its real title/description
+5. As a member: join a room, post, and see the message appear live in a second browser without refresh; "online" reflects real presence
+6. As a non-member: cannot read history or post; as a `customer` cannot access any moderation control
+7. Post a message containing self-harm keywords → safety-netting reply with `/crisis` + 988 appears automatically and the message is flagged for review
+8. Report a message → it appears in `/admin` moderation queue; removing it, muting or banning the author takes effect immediately
+9. Age gate blocks an under-18 declared date of birth from joining, and the attempt is logged
+10. Deleting a member's account removes or anonymises their messages per the agreed retention policy
 
 ---
 
