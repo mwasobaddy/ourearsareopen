@@ -222,7 +222,7 @@ Use Postman's cookie jar + a login flow, or set the `Authorization: Bearer <acce
 ### Send booking reminders (cron)
 - **Method:** `GET`
 - **Path:** `/api/email/reminders?at=<iso8601>&hours=24`
-- **Auth:** `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set in the environment. Vercel Cron sends this automatically (see `vercel.json`).
+- **Auth:** `Authorization: Bearer <CRON_SECRET>` when `CRON_SECRET` is set in the environment. Vercel Cron sends this automatically (see `vercel.json`). The production cron runs daily at 13:00 UTC — Vercel Hobby only permits one run per day — and safe to call more often by hand or from an external scheduler, thanks to the `reminder_sent_at` stamp.
 - **Behaviour:** emails one reminder to every confirmed booking with a listener assigned whose slot starts inside the lookahead window, then stamps `bookings.reminder_sent_at` so repeat runs never double-send. Bookings in the past or still awaiting a listener are skipped.
 - **Query params:** `at` optional (reference time, defaults to now) · `hours` optional (lookahead window, default `24`).
 - **Responses:** `200` `{ ok: true, sent, skipped, at }` · `400` invalid `at` · `401` missing/invalid cron secret

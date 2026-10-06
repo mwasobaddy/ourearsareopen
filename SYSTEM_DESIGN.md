@@ -178,7 +178,7 @@ The book-listener multi-step flow: choose phone/chat type, concern, listener pre
 - [x] Customer join path — profile Conversations tab shows the matched listener's name, a "Join Call"/"Join Chat" button from 15 min before the slot until it ends, "Waiting for a listener to accept" while unmatched, and a "Complete payment to confirm" link for unpaid bookings
 - [x] Session completion closes the booking — completing a session marks the originating booking `completed`; ending early marks it `cancelled` (previously bookings stayed `confirmed` forever)
 - [x] Free conversations are never charged — `POST /api/stripe/payment-intent` rejects free bookings and already-paid bookings with `409`
-- [x] Reminders are scheduled — `vercel.json` cron → `GET /api/email/reminders` (hourly, 24 h lookahead, `reminder_sent_at` idempotency, `CRON_SECRET` auth when configured)
+- [x] Reminders are scheduled — `vercel.json` cron → `GET /api/email/reminders` (daily at 13:00 UTC, 24 h lookahead, `reminder_sent_at` idempotency, `CRON_SECRET` auth). The project is on Vercel Hobby, which allows only one cron run per day — an hourly schedule is rejected by the platform with "Hobby accounts are limited to daily cron jobs". Hourly reminders need a Pro plan or an external trigger (GitHub Actions / Supabase pg_cron calling the same endpoint; it is safe to run hourly because of the `reminder_sent_at` stamp)
 - [x] End-to-end verified in the browser: free booking → listener notified → accept → customer sees the match + join button → live chat between both parties → notes → complete → booking `completed` + notes document + notification. Overlap, past-slot, too-soon, and free-charge guards all return the right errors. Test data removed afterwards.
 
 ### Questions
