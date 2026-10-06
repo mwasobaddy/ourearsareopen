@@ -153,9 +153,9 @@ In Supabase Dashboard → Storage → `avatars`, confirm a file exists at `<your
 
 ## Module 3: Booking (Scheduled Sessions)
 
-**Status:** 🟡
+**Status:** 🟢
 
-The book-listener multi-step flow: choose phone/chat type, concern, listener preferences, date/time, then payment. Creates a booking that persists in the DB.
+The book-listener multi-step flow: choose phone/chat type, concern, listener preferences, date/time, then payment. Creates a booking that persists in the DB, notifies listeners, and ends with a listener assigned and a live session the customer can join.
 
 ### TO-DO
 - [x] `bookings` table (user_id, listener_id, type, concern, preferences jsonb, slot_start/end, status pending/confirmed/completed/cancelled/no_show, payment_intent_id) + RLS (migration `0006`)
@@ -168,7 +168,18 @@ The book-listener multi-step flow: choose phone/chat type, concern, listener pre
 - [x] Reschedule booking — `PATCH /api/bookings/[id]` + `GET /api/bookings/[id]/reschedule-options` + Reschedule button/dialog on the profile Conversations tab (frees old slot, claims a new one)
 - [x] Feature-flag wiring — the booking flow honors `free_booking` (hides the "Free option") and `scheduled_phone` (hides the Phone conversation type) from `feature_flags`
 - [ ] Booking hold / time-lock while paying (needs payment timing from Module 4)
-- [ ] Booking confirmations via email *(Blocked until Resend configured)*
+- [x] Booking confirmations via email — free bookings confirm + email on creation; paid bookings confirm + email from the Stripe webhook
+- [x] Server-side creation — `POST /api/bookings` replaces the old client-side insert: validates the slot (future, ≥30 min lead, no overlap with the customer's own bookings), honors the `free_booking` / `scheduled_phone` flags, and confirms free bookings immediately (nothing used to move them out of `pending`)
+- [x] Fixed slot parsing — the old `new Date("2026-10-07T9:00AM:00")` produced an Invalid Date and threw on every submit; slots are now parsed into a real local Date and sent as ISO
+- [x] **Listener assignment** (the piece that made booked sessions impossible) — migration `0019_booking_assignment.sql` adds `assigned_at` / `reminder_sent_at`, the open-request index, an RLS policy letting listeners read unassigned confirmed bookings, and a policy letting a customer read their matched listener's profile
+- [x] Open requests feed — `GET /api/bookings/open` + `OpenBookingRequests` panel on `/team-member/appointments` (concern text, preferences, time; polls every 30 s)
+- [x] Accept flow — `POST /api/bookings/[id]/accept` (listener only, 15 hr/week cap, no double-booking, claims a matching availability slot) with `lib/booking-ops.ts` holding the shared assignment rules
+- [x] Admin assignment — `PATCH /api/admin/bookings/assign` + `/admin/bookings` page listing every booking with status, payment option, preferences, and an assign/clear control
+- [x] Customer join path — profile Conversations tab shows the matched listener's name, a "Join Call"/"Join Chat" button from 15 min before the slot until it ends, "Waiting for a listener to accept" while unmatched, and a "Complete payment to confirm" link for unpaid bookings
+- [x] Session completion closes the booking — completing a session marks the originating booking `completed`; ending early marks it `cancelled` (previously bookings stayed `confirmed` forever)
+- [x] Free conversations are never charged — `POST /api/stripe/payment-intent` rejects free bookings and already-paid bookings with `409`
+- [x] Reminders are scheduled — `vercel.json` cron → `GET /api/email/reminders` (hourly, 24 h lookahead, `reminder_sent_at` idempotency, `CRON_SECRET` auth when configured)
+- [x] End-to-end verified in the browser: free booking → listener notified → accept → customer sees the match + join button → live chat between both parties → notes → complete → booking `completed` + notes document + notification. Overlap, past-slot, too-soon, and free-charge guards all return the right errors. Test data removed afterwards.
 
 ### Questions
 - ✅ **Resolved:** Payment stays out of scope for Module 3 — `bookings` created with `status = pending`, `payment_intent_id` left null; Module 4 (Stripe) flips to `confirmed` on webhook.
@@ -273,9 +284,9 @@ Expected checklist (blocked until client Stripe keys are provided):
 
 ## Module 6: Realtime — Voice & Chat
 
-**Status:** 🟡 (realtime chat done; voice/Twilio portion blocked on client creds)
+**Status:** 🟡 (realtime chat fully working; voice code complete but the Twilio account is closed)
 
-In-session chat (real-time text) and voice calls (phone appointments). Voice via Twilio/LiveKit initiated by the listener dialer (🔴 blocked until client credentials). Chat via Supabase Realtime — fully working now.
+In-session chat (real-time text) and voice calls (phone appointments). Voice is a Twilio click-to-call bridge initiated by the listener — implemented, but 🔴 blocked on the Twilio account itself being active. Chat via Supabase Realtime — fully working now.
 
 ### TO-DO
 - [x] Migration `0011_realtime_sessions.sql` — `sessions` table (mode chat/phone, status pending/active/left/ended/completed, origin from queue_entry_id or booking_id, notes, started_at/ended_at) + RLS (participants read/update, admins all) + realtime publication
@@ -284,10 +295,11 @@ In-session chat (real-time text) and voice calls (phone appointments). Voice via
 - [x] Realtime chat UI in `/session/[id]` (`components/session/session-room.tsx`) — live messages, send, history, participant status notifications ("participant left")
 - [x] Session state notifications ("participant left", "you left") surfaced as system chips in the chat feed
 - [x] `QueueStatus` assigned view now links into `/session/<entry>?origin=queue`
-- [ ] `app/api/twilio/token/route.ts` to mint access token — 🔴 blocked (Twilio creds)
-- [ ] Listener dialer — initiate outbound call via website (no consumer call-in) — 🔴 blocked
-- [ ] Call start/end/disconnect handling — 🔴 blocked
-- [ ] Voice session duration recording — 🔴 blocked (requires Twilio/LiveKit)
+- [x] Voice is a PSTN click-to-call bridge, not an in-browser call — `POST /api/twilio/call` dials the consumer from the Twilio number and bridges to the listener's own phone (matches "only the team member places the call", and needs no TwiML app or browser SDK). `DELETE /api/twilio/call` hangs up; the Call SID is stored on `sessions.room_id`
+- [x] Phone-mode UI in the session room — listener gets "Call consumer" / "Hang up"; the customer is told to expect a call; chat stays available as a fallback
+- [x] Credential resilience — tries the API key pair, falls back to the account auth token, and returns an actionable message when the Twilio account itself is unavailable
+- [ ] Voice calls end-to-end — 🔴 **blocked: the Twilio account `AC9e947d…` is closed (`status 4`, error 20003)**. No code change fixes this; the account must be reactivated or replaced (see `docs/CLIENT_ACTION_REQUIRED.md` §3)
+- [ ] Consumer phone verification — required by Twilio trial accounts before any number can be called
 
 ### Questions
 - (none yet)
@@ -297,7 +309,7 @@ In-session chat (real-time text) and voice calls (phone appointments). Voice via
 2. A `sessions` row is created (`status = active`, `started_at` set) when opened; its linked queue entry flips to `connected`.
 3. Only the two participants can read/send messages (postgres RLS); guests/non-participants get 403.
 4. Clicking "Leave" sets the session to `left` and a system chip appears on the other side; "End Session" sets `ended` and disables the input.
-5. Voice (phone mode) still needs Twilio credentials — 🔴 client-blocked (see Module 6 client checklist).
+5. Voice (phone mode) shows a "Call consumer" button for the listener; placing a call returns "Voice calling is unavailable — the Twilio account needs to be reactivated" until the account is fixed (see `docs/CLIENT_ACTION_REQUIRED.md` §3).
 
 ---
 

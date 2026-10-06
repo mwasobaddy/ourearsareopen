@@ -55,36 +55,63 @@ Everything is built and deployed — but three integrations need your credential
 
 ---
 
-## 3. Twilio API Credentials (Voice Calls & SMS Will Not Work Without This)
+## 3. Twilio — the account is CLOSED (blocking voice calls)
 
-**Problem:** Voice sessions and SMS reminders are fully built but need Twilio API credentials. We have the main account SID and phone number (`+18888744429`), but we're missing the **API Key SID** and **API Key Secret** needed to make outbound calls and send SMS.
+**Problem we hit on 2026-10-06:** the Twilio credentials are present in the project, but the account they belong to is **not active**. Twilio's API returns:
+
+```
+20003 authentication failed, account AC9e947d… with status 4 is not active
+```
+
+Status `4` means the account is **closed** — most likely the free trial was closed or the account was cancelled. Every call attempt fails, so no one can place or receive a phone conversation. This is not a code problem and not a missing-key problem; the account itself needs attention.
 
 **What to do:**
 
-1. Go to **Twilio Console → API Keys → Create API Key**.
-2. Give it a name (e.g. "ourearsareopen-prod") and copy the **SID** and **Secret**.
-3. In **Vercel → ourearsareopen → Settings → Environment Variables**, add:
+1. Log in at [twilio.com/console](https://twilio.com/console).
+2. If the account shows as closed, either **reactivate it** (Twilio support can restore trial accounts) or **sign up for a new account**.
+3. Buy/keep a Twilio phone number with **voice** capability (SMS capability separately if you want text reminders).
+4. Add the new credentials in **Vercel → ourearsareopen → Settings → Environment Variables**:
    ```
-   TWILIO_API_KEY_SID=SK_your_key_sid_here
-   TWILIO_API_KEY_SECRET=your_key_secret_here
+   TWILIO_ACCOUNT_SID=AC…
+   TWILIO_AUTH_TOKEN=…
+   TWILIO_PHONE_NUMBER=+1…
+   TWILIO_API_KEY_SID=SK…
+   TWILIO_API_KEY_SECRET=…
    ```
-4. If you haven't already, upgrade to a **paid Twilio account** and ensure the phone number `+18888744429` has **SMS capability** enabled (for the 15-minute reminder SMS).
-5. Redeploy.
+5. Verify the consumer's phone number in the Twilio console (trial accounts can only call verified numbers).
+6. Redeploy.
 
-**What breaks without it:** No voice calls from the session room. No 15-minute SMS reminders. The phone conversation feature is fully built but cannot dial out.
+**What breaks without it:** phone conversations can't connect. The listener's "Call consumer" button returns a friendly notice ("Voice calling is unavailable — the Twilio account needs to be reactivated") and chat still works, so nothing breaks for the customer — but the voice feature is unavailable.
+
+**Good news:** the plumbing is finished and tested. `POST /api/twilio/call` bridges the Twilio number → consumer → the listener's own phone (no TwiML app, no browser SDK needed), and `DELETE /api/twilio/call` hangs up. It picks the API key first and falls back to the account auth token automatically. The only thing missing is a live account.
 
 ---
 
-## Summary of Vercel Environment Variables Needed
+## 4. CRON_SECRET (recommended, for booking reminders)
 
-| Variable | Value | Source |
+Booking reminder emails are now sent by a scheduled job (`vercel.json` → `/api/email/reminders`, hourly). The endpoint is open to anyone by default, which means a stranger could trigger it early.
+
+**What to do:** in **Vercel → Settings → Environment Variables**, add any random string:
+
+```
+CRON_SECRET=<paste a long random string>
+```
+
+Vercel automatically sends it as `Authorization: Bearer <secret>` on cron requests, and the endpoint rejects everything else. Customers can never receive two reminder emails for the same booking — the endpoint stamps `bookings.reminder_sent_at` after each send.
+
+---
+
+## Summary of Vercel Environment Variables
+
+| Variable | Status | Notes |
 |---|---|---|
-| `STRIPE_WEBHOOK_SECRET` | `whsec_...` | Stripe Dashboard → Webhooks → Signing secret |
-| `EMAIL_FROM` | `noreply@yourdomain.com` | After Resend domain is verified |
-| `TWILIO_API_KEY_SID` | `SK_...` | Twilio Console → API Keys |
-| `TWILIO_API_KEY_SECRET` | `...` | Twilio Console → API Keys (shown once) |
+| `STRIPE_WEBHOOK_SECRET` | ✅ set | Stripe Dashboard → Webhooks → signing secret |
+| `EMAIL_FROM` | ✅ set | `noreply@ourearsareopen.com` (Resend domain must stay verified) |
+| `CRON_SECRET` | ⬜ add | Any random string — protects the reminder job |
+| `TWILIO_*` | ❌ invalid | Account `AC9e947d…` is closed (status 4) — see section 3 |
 
-All four should be added as **Production** environment variables in Vercel, then the app should be redeployed.
+Plus one Stripe-side fix: the webhook endpoint URL must point at the live domain —
+`https://www.ourearsareopen.com/api/webhooks/stripe`.
 
 ---
 
@@ -93,6 +120,9 @@ All four should be added as **Production** environment variables in Vercel, then
 These are live and functional right now:
 
 - **Stripe payments** — customers can pay $10.99 for conversations (test mode works; live mode needs the webhook fix above)
+- **Scheduled bookings, end to end** — book → pay or book free → listeners are notified and accept from their Appointments page → customer gets a "Join" button 15 minutes before the slot → live chat session → notes, follow-up booking, completion
+- **Booking guardrails** — no overlapping bookings, no charging free conversations, no double-paying, no double-booking a listener
+- **Admin bookings page** — see every booking, who is covering it, and assign or clear a listener
 - **Queue system** — customers join the queue, listeners accept/decline, sessions open
 - **Chat sessions** — real-time messaging between customers and listeners
 - **Session management** — 15-minute timer, extend, safety disconnect, end
@@ -107,7 +137,7 @@ These are live and functional right now:
 
 ## Timeline
 
-Once you provide the four environment variables above and fix the Stripe webhook URL, we can go fully live. The Resend domain verification takes a few minutes; Stripe and Twilio are instant once the keys are in Vercel.
+Chat is fully live today — both the open queue and scheduled bookings. To close the last gaps: fix the Stripe webhook URL (minutes), add `CRON_SECRET` (a minute), and reactivate or replace the Twilio account (depends on Twilio support). Voice is the only feature still waiting on a third party.
 
 Let us know if you need help with any of these steps — happy to jump on a call to walk through it.
 
