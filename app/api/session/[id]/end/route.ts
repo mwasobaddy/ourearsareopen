@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { syncBookingFromSession } from "@/lib/booking-ops";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -83,6 +84,10 @@ export async function POST(
       { status: 500 },
     );
   }
+
+  // Ending early closes the originating booking too, otherwise the customer's
+  // profile keeps listing it as upcoming.
+  await syncBookingFromSession({ session, status: "cancelled" });
 
   return NextResponse.json({ session: updated });
 }

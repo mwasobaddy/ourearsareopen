@@ -6,6 +6,7 @@ import {
   createNotification,
 } from "@/lib/session-ops";
 import { sendSessionSynopsisEmail } from "@/lib/email";
+import { syncBookingFromSession } from "@/lib/booking-ops";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,9 @@ export async function POST(
       { status: 500 },
     );
   }
+
+  // The conversation is done — close the booking it came from.
+  await syncBookingFromSession({ session, status: "completed" });
 
   let document = null;
   // If the listener recorded notes, persist a session-notes document.
