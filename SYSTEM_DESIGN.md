@@ -606,6 +606,83 @@ _(Not applicable until this module is built. The steps below are the acceptance 
 
 ---
 
+## Module 13: Contact & Enquiries (Public Contact Form)
+
+**Status:** ⚪ Not Started (form UI exists; **nothing sent from it is ever received**)
+
+> **Scope note:** `/contact` appears in `docs/SCOPE_OF_WORK.md:625` in the route inventory as "Contact form", and `:57` records that the prototype's pages were "forms only" — but **no module or phase in the scope covers receiving, storing, or answering an enquiry**. Like **Module 12**, the page was built and the receiving half never was. This is new scope, documented for agreement before code is written.
+
+The public "get in touch" surface: a visitor sends a message, the business receives and answers it.
+
+### Current state — what exists
+- [x] `/contact` form UI — first name, last name, email, phone (optional), topic select (general / services / booking / volunteer / donations / partnership / other), message (`app/contact/page.tsx:98-176`). One of **three dead public data forms** — see Module 12 for `/volunteer` + `/workforce-apply`; all three share the same root cause (prototype `<form>` markup never wired to a receiver)
+- [x] `/contact` supporting content — Email Us card (mailto), address, business hours, "we operate remotely" card, remote-first photo callout, and a crisis box that correctly routes to `/crisis`
+- [x] `/crisis` — real data from `content_cris + hotline links` (Module 11); the safety destination on the same page does work
+- [x] `lib/site.ts:30` — `site.email` (`hello@ourearsareopen.org`), the only contact path that actually functions, wired to the mailto card and the site footer
+- [x] Notification + email plumbing to reuse — `createNotification` (`lib/session-ops.ts`) and `lib/email.ts`
+
+### Verified behaviour (tested on production 2026-10-06)
+Submitting "Send Message" performs a plain GET navigation back to `/contact`. Network log: **zero POST requests**. The five inputs carry no `name` attributes, so nothing is even serialised — the URL stays `/contact` with no query string and the fields come back empty. There is **no confirmation, no error, and no loading state**, so a visitor gets no indication anything failed.
+
+### Gaps — 🔴 blockers
+- [ ] **`/contact` submits nowhere.** `app/contact/page.tsx:98` is `<form className="mt-8 space-y-6">` — no `action`, no `method`, no `onSubmit`, and the page is a server component with no `"use client"`, state, or fetch
+- [ ] **No `contact_messages` table** — verified against the live project (16 tables; none for contact) and in no migration
+- [ ] **No `POST /api/contact` route** — `app/api/` has admin, availability, bookings, email, notifications, queue, session, stripe, super-admin, twilio, webhooks; nothing receives an enquiry
+- [ ] **No email to the business and no auto-reply to the sender** — the promised *"usually within 24 hours"* is unfulfillable because nothing arrives
+- [ ] **No admin inbox** — nothing lists or reads enquiries. `support_tickets` is staff-created for refunds (`/api/admin/support`), not a public inbox
+
+### Gaps — 🟡 high
+- [ ] **Silent failure is the worst kind.** The form looks real, sits in the top navigation and the footer, and the page tells elderly visitors *"we will work with you to navigate our website"* — so the highest-trust surface on the site is the least functional. Every one of the three public data forms is dead: `/contact`, `/volunteer`, `/workforce-apply`
+- [ ] **No triage or urgency handling.** The topic select is never stored, so nothing is routed by topic; nothing flags an urgent or crisis-adjacent message, and an unattended inbox can receive someone in distress with no safety auto-reply pointing to `/crisis` or 988
+- [ ] **No spam protection** — the moment this endpoint exists it is unauthenticated and public, so a honeypot, rate limiting, and volume visibility are required from day one, not retrofitted
+
+### Gaps — 🟡 medium
+- [ ] **No delivery or ownership tracking** — no read/replied state, no record of who answered, no internal notes
+- [ ] **No `/privacy` link or consent note** beside a form collecting email, phone and a free-text message
+- [ ] **Domain inconsistency** — `site.email` is `@ourearsareopen.org` while Resend sending is configured on `ourearsareopen.com`; align before building on it
+- [ ] **No attachment option** — decided in the questions below
+- [ ] **No auto-reply wording or sign-off** defined
+
+### Interim workaround (no code)
+- [ ] Point "Send Message" at a `mailto:` with a prefilled subject and body (details already exist in `site.email`), or an external form service, so enquiries arrive today.
+
+### Proposed build — awaiting client confirmation, NOT started
+- [ ] `contact_messages` table (full_name, email, phone, topic, message, urgency flag, status new/read/replied/archived, internal notes, assigned_to, replied_at, created_at) + RLS (admins all via `is_admin()`; **no public read policy**)
+- [ ] `POST /api/contact` — zod validation, message length limits, honeypot field, IP + email rate limiting; stores the row, then notifies
+- [ ] Notify the business — in-app admin notification via `createNotification` + an email to the configured inbox address via `lib/email.ts`
+- [ ] Auto-reply to the sender confirming receipt and restating the response window
+- [ ] **Safety auto-reply** when the message matches crisis keywords — point to `/crisis` and 988 immediately, regardless of business hours
+- [ ] `/contact` becomes a client component: loading / success / error states, button disabled while sending, fields cleared on success, errors announced accessibly
+- [ ] `/admin/messages` inbox — new / read / replied / archived, topic + urgency filters, search, internal notes, assignment, audit-logged
+- [ ] Reply from the inbox (reuses `lib/email.ts`) with the thread kept on the row
+- [ ] Daily volume + spam-rejection count visible in `/admin/dashboard` so abuse is visible
+- [ ] Add a `/privacy` link and a short consent line under the form
+- [ ] Align `site.email` with the sending domain and add the auto-reply sign-off
+
+### Questions
+- ❓ Should enquiries land in a **new** `/admin/messages` inbox, or share the existing `/admin/support` one? (Support is staff-created; contact is inbound — different workflows.)
+- ❓ Who is responsible for replying, and is **"within 24 hours"** a promise the business can keep? If not, the page copy should say something honest like "usually within 2 business days".
+- ❓ Where should enquiries be delivered — the inbox in the admin area, an email address, or both?
+- ❓ Approve the safety auto-reply wording for crisis keywords?
+- ❓ Attachments needed (e.g. someone sending a document), or is text-only acceptable?
+- ❓ Retention: how long should enquiries be kept before deletion (applicant PII)?
+- ❓ Should the phone field be kept, given phone conversations need a number on file anyway?
+
+### How to test — Module 13
+_(Not applicable until this module is built. The steps below are the acceptance checks to run once it is.)_
+1. Submit the form on `/contact` → one `contact_messages` row with the correct name/email/phone/topic/message; the URL does not change and no data appears in it
+2. Reload immediately → no duplicate row; submitting an empty or invalid form creates nothing and shows an inline error
+3. The business receives both an in-app admin notification and an email at the configured inbox address; the sender receives the auto-reply
+4. A message containing crisis wording triggers the safety auto-reply pointing to `/crisis` and 988, and is flagged urgent in the inbox
+5. Open `/admin/messages` as `admin` (list appears), as `listener` (redirected), and logged out (redirected); a signed-in customer cannot read or write any message
+6. Mark read, add an internal note, reply from the inbox → status moves to replied, the reply reaches the sender, and the note is visible to other admins but not to the sender
+7. Repeated submissions from one source are rate limited/honeypot-rejected, and the rejection is visible in the `/admin/dashboard` volume figures
+8. On a slow connection the button disables and shows progress; on a forced API error the form explains the failure and preserves what was typed
+9. Keyboard-only and screen-reader pass: every field labelled, success and error messages announced, focus moves to the success message
+10. Send a message containing personal/sensitive information → confirm it is stored in the private table only and is not exposed in any URL, log line, or public read path
+
+---
+
 ## Cross-Module Decisions & Architecture Notes
 
 This section captures decisions that span multiple modules. Revisit as you build.
