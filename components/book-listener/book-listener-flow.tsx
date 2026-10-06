@@ -14,7 +14,6 @@ import {
   LogIn,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,7 +96,6 @@ export function BookListenerFlow({
   freeBookingEnabled = true,
   scheduledPhoneEnabled = true,
 }: Props = {}) {
-  const supabase = createClient();
   const { isAuthenticated, isLoading, user } = useAuth();
 
   const [type, setType] = useState<"phone" | "chat">(
@@ -114,11 +112,33 @@ export function BookListenerFlow({
 
   const [saving, setSaving] = useState(false);
   const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
+  const [createdIsFree, setCreatedIsFree] = useState(false);
 
   const wordCount = useMemo(() => {
     const t = concern.trim();
     return t.length === 0 ? 0 : t.split(/\s+/).length;
   }, [concern]);
+
+  /**
+   * Build a real Date from the picked date + "9:00 AM"-style slot.
+   *
+   * `new Date("2026-10-07T9:00AM:00")` is an Invalid Date in every browser, so
+   * the slot label is converted to a 24-hour wall-clock time first. The result
+   * is interpreted in the customer's own timezone and sent as UTC.
+   */
+  function slotToIso(date: string, slot: string): string | null {
+    const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(slot.trim());
+    if (!match) return null;
+
+    let hours = Number(match[1]) % 12;
+    if (match[3].toUpperCase() === "PM") hours += 12;
+
+    const [year, month, day] = date.split("-").map(Number);
+    if (!year || !month || !day) return null;
+
+    const start = new Date(year, month - 1, day, hours, Number(match[2]), 0, 0);
+    return Number.isNaN(start.getTime()) ? null : start.toISOString();
+  }
 
   async function handleSubmit() {
     if (!isAuthenticated || !user) {
@@ -138,36 +158,40 @@ export function BookListenerFlow({
       return;
     }
 
-    // Combine date (YYYY-MM-DD) + time (e.g. 9:00 AM) into a timestamp.
-    const t = time.replace(" ", "");
-    const slotStart = new Date(`${date}T${t}:00`);
-    const slotEnd = new Date(slotStart.getTime() + 15 * 60 * 1000);
-
-    setSaving(true);
-    const { data, error } = await supabase
-      .from("bookings")
-      .insert({
-        user_id: user.id,
-        type,
-        payment_option: paymentOption,
-        concern,
-        preferences: { gender, belief, language, orientation },
-        slot_start: slotStart.toISOString(),
-        slot_end: slotEnd.toISOString(),
-        status: "pending",
-      })
-      .select("id")
-      .single();
-
-    setSaving(false);
-    if (error || !data) {
-      toast.error(error?.message || "Couldn't create your booking. Please try again.");
+    const slotStart = slotToIso(date, time);
+    if (!slotStart) {
+      toast.error("That time slot couldn't be read. Please pick another time.");
       return;
     }
 
-    toast.success("Booking created!");
-    setCreatedBookingId(data.id);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setSaving(true);
+    try {
+      const res = await fetch("/api/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type,
+          payment_option: paymentOption,
+          concern: concern.trim(),
+          preferences: { gender, belief, language, orientation },
+          slot_start: slotStart,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.booking) {
+        toast.error(data.error || "Couldn't create your booking. Please try again.");
+        return;
+      }
+
+      toast.success("Booking created!");
+      setCreatedBookingId(data.booking.id);
+      setCreatedIsFree(paymentOption === "free");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      toast.error("Couldn't create your booking. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (createdBookingId) {
@@ -179,18 +203,23 @@ export function BookListenerFlow({
             You&apos;re all set!
           </h2>
           <p className="max-w-md text-muted-foreground">
-            Your {type} conversation is booked. Complete the next step to
-            confirm your slot, then a listener will be matched to you.
+            {createdIsFree
+              ? `Your ${type} conversation is confirmed. We'll notify you as soon as a listener accepts — open it from your profile when it's time, and you'll get a reminder the day before.`
+              : `Your ${type} conversation is booked. Complete the next step to confirm your slot, then a listener will be matched to you.`}
           </p>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-            <Button size="lg" asChild>
-              <Link href={`/payment?booking=${createdBookingId}`}>
-                Continue to Payment
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
+            {!createdIsFree && (
+              <Button size="lg" asChild>
+                <Link href={`/payment?booking=${createdBookingId}`}>
+                  Continue to Payment
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
+              </Button>
+            )}
             <Button size="lg" variant="outline" asChild>
-              <Link href="/profile">Go to Profile</Link>
+              <Link href="/profile">
+                {createdIsFree ? "Go to My Profile" : "Go to Profile"}
+              </Link>
             </Button>
           </div>
         </CardContent>
@@ -388,8 +417,8 @@ export function BookListenerFlow({
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />
                 <span>
-                  Listeners available Monday–Saturday. Limited availability on
-                  Sunday.
+                  Times are shown in your timezone. A listener accepts your
+                  request and you&apos;re notified when you&apos;re matched.
                 </span>
               </div>
             </div>

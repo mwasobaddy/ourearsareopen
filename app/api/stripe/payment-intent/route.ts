@@ -47,6 +47,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  const adminClient = createAdminClient();
+
   // Respect platform feature flags for donation / queue payments.
   const flags = await getFeatureFlags();
   if (parsed.type === "donation" && !flags.donations) {
@@ -73,6 +75,33 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // A free conversation must never be charged, and an already-paid booking
+    // must never be charged twice.
+    const { data: booking } = await adminClient
+      .from("bookings")
+      .select("id, user_id, payment_option, status")
+      .eq("id", parsed.bookings_id)
+      .maybeSingle();
+
+    if (!booking) {
+      return NextResponse.json({ error: "Booking not found." }, { status: 404 });
+    }
+    if (booking.user_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    if (booking.payment_option === "free") {
+      return NextResponse.json(
+        { error: "This conversation is free — no payment is needed." },
+        { status: 409 },
+      );
+    }
+    if (booking.status !== "pending") {
+      return NextResponse.json(
+        { error: "This booking has already been paid for." },
+        { status: 409 },
+      );
+    }
   } else {
     amountCents = parsed.amount_cents ?? MIN_DONATION_CENTS;
     if (amountCents < MIN_DONATION_CENTS || amountCents > MAX_DONATION_CENTS) {
@@ -84,7 +113,7 @@ export async function POST(req: NextRequest) {
     currency = parsed.currency ?? "usd";
   }
 
-  const admin = createAdminClient();
+  const admin = adminClient;
   const stripe = getStripe();
 
   // Grab the profile email so we can store / use it with Stripe.

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { notifyListenersOfOpenBooking } from "@/lib/booking-ops";
 import {
   sendBookingConfirmationEmail,
   sendSessionReceiptEmail,
@@ -129,13 +130,24 @@ async function handleSucceeded(
     });
   }
 
-  // For paid bookings, confirm the booking once funds are captured.
+  // For paid bookings, confirm the booking once funds are captured — and open
+  // it to listeners, since this is the first moment the request is real.
   if (existing.type === "booking" && existing.bookings_id) {
-    await admin
+    const { data: confirmed } = await admin
       .from("bookings")
       .update({ status: "confirmed", payment_intent_id: pi.id })
       .eq("id", existing.bookings_id)
-      .eq("payment_option", "paid");
+      .eq("payment_option", "paid")
+      .select("id, type, slot_start")
+      .maybeSingle();
+
+    if (confirmed) {
+      await notifyListenersOfOpenBooking({
+        bookingId: confirmed.id,
+        type: confirmed.type,
+        slotStart: confirmed.slot_start,
+      });
+    }
   }
 }
 
