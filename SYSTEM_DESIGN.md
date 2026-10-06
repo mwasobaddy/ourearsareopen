@@ -511,6 +511,33 @@ Recruitment pipeline: publish a role → apply → review → interview → offe
 - [x] `/admin/listeners/new` + `POST /api/admin/listeners` — create a team member (auth user + `profiles.role = 'listener'`)
 - [x] Admin nav: Dashboard, Listeners, Bookings, Sessions, Users, Content, Reports, Support
 
+### The two application pages, in detail
+
+Both are public, unauthenticated, and **identical in structure** — same field ids, same file inputs, no `"use client"`, no state, no validation, no `action`, no `onSubmit`, no fetch. `/workforce-apply` and `/volunteer` differ only in the surrounding copy and one hidden value.
+
+| | `/workforce-apply` | `/volunteer` |
+|---|---|---|
+| Purpose | paid 1099 role | volunteer listener |
+| Context panel | 1099 terms, Wi-Fi assistance offer, headsets, training, weekly pay | 501(c)(3) Florida charitable org framing |
+| Required copy | non-discrimination, "a criminal background does not stop you", 18+ | non-discrimination, "a criminal background does not stop you", 18+ |
+| Hidden field | `applicationType=workforce` (`:139-144`) | `applicationType=volunteer` (`:90-95`) |
+| Submit | `:191` — **does nothing** | `:141` — **does nothing** |
+
+Fields collected by both: first name (required), last name (required), email (required), résumé (labelled *required* but **no `required` attribute** — `:151` / `:103`), intro video link, intro video file, written intro. That is the entire payload, and none of it is transmitted.
+
+**Inbound links:** `/workforce-apply` is reachable from 3 places, all in `app/join-team/page.tsx` (`:179` hero "Become a Listener", `:268` every "View & Apply" button, `:282` "Fill out the form"). `/volunteer` from 5 places (join-team hero `:173` and `:347`, footer, home donate section, home services section) — it is the **most-trafficked entry point** of the two, being in the site footer.
+
+**Defects beyond "it doesn't submit":**
+- **Résumé is not actually required** despite the label on both pages
+- **No phone number** — and `profiles.phone` is required for phone conversations (the Twilio call path refuses without it), so every hire would need it added by hand
+- **No age confirmation** — both pages state "You must be 18+" but nothing captures or checks a date of birth
+- **No consent to be contacted**, and no link to `/privacy` on either page, while both ask for a résumé and an intro video (applicant PII)
+- **The stated hiring priorities are never captured** — the pages say they prioritise elderly, veterans, single parents, college students and second-chancers, but ask none of that
+- **No role field** (see the enum gap below) and no `opening` reference
+- **Accessibility:** the intro-video group's `<Label>` has no `htmlFor`, and `videoLink` / `videoFile` / `writtenIntro` have no associated labels — a file input's placeholder is not an accessible name, so the video upload has none
+- **No dedupe** — the same person can submit both a volunteer and a paid application, or the same one repeatedly
+- **Nothing to build on:** both are static server components, so a future fix is a client component + API route, not a patch to existing logic
+
 ### Gaps — 🔴 blockers (the process stops here today)
 - [ ] **`/workforce-apply` submits nowhere.** `app/workforce-apply/page.tsx:110` is `<form className="space-y-5">` — no `action`, no `onSubmit`, not a client component. Submitting does a GET navigation back to the same URL and **discards every field including the résumé and video file**. The page re-renders as if nothing happened; there is no confirmation and no error
 - [ ] **`/volunteer` has the identical defect** — `app/volunteer/page.tsx:62`, same bare `<form>`
@@ -543,7 +570,8 @@ Recruitment pipeline: publish a role → apply → review → interview → offe
 - [ ] Per-opening detail page + `/workforce-apply?opening=<id>` so the applied-for role is always known; free-text "no suitable role" path retained
 - [ ] `applications` table (opening_id nullable, `type` workforce/volunteer, full_name, email, phone, resume_path, intro_video_path, intro_text, `status` submitted/screening/interview/offer/hired/rejected, reviewer notes, reviewed_by, reviewed_at, created_at) + RLS (admins all; a signed-in applicant reads only their own)
 - [ ] Private `applications` storage bucket for résumés and intro videos (service-role upload, no public URLs)
-- [ ] `POST /api/applications` + real client form (validation, file limits/types, honeypot + rate limiting)
+- [ ] `POST /api/applications` + real client form — both pages become client components sharing one form component; validation, file size/type limits, honeypot + rate limiting
+- [ ] Add the fields the pages imply but never capture: phone (needed for phone sessions), 18+ confirmation, consent to be contacted, an accessible name for the video upload, enforced `required` on the résumé, and a `/privacy` link
 - [ ] Applicant confirmation email with a reference number, plus an in-app/email notification to admins (reuses `lib/email.ts` + `createNotification`)
 - [ ] `/admin/applicants` pipeline — filter by status/role/opening, read the résumé, advance status, record a rejection reason, audit-logged
 - [ ] Applicant status page at `/application/status?token=<signed>` — read-only progress, no account needed
