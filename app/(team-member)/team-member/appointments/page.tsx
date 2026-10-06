@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { OpenBookingRequests } from "@/components/team-member/open-booking-requests";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -12,6 +13,9 @@ export const metadata: Metadata = {
   title: "Appointments | Team Member Portal",
   description: "Your scheduled phone and chat sessions.",
 };
+
+// Conversations can be opened 15 minutes before the slot through to its end.
+const JOIN_EARLY_MS = 15 * 60_000;
 
 export default async function TeamMemberAppointmentsPage() {
   const userClient = await createClient();
@@ -39,7 +43,7 @@ export default async function TeamMemberAppointmentsPage() {
   const { data: appointments } = await admin
     .from("bookings")
     .select(
-      "id, type, slot_start, slot_end, status, profiles:user_id(full_name)",
+      "id, type, concern, slot_start, slot_end, status, profiles:user_id(full_name)",
     )
     .eq("listener_id", user.id)
     .in("status", ["pending", "confirmed"])
@@ -54,6 +58,8 @@ export default async function TeamMemberAppointmentsPage() {
           Your scheduled phone and chat sessions.
         </p>
       </div>
+
+      <OpenBookingRequests />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -74,6 +80,15 @@ export default async function TeamMemberAppointmentsPage() {
                 const customer = Array.isArray(apt.profiles)
                   ? apt.profiles[0]
                   : apt.profiles;
+                const startMs = apt.slot_start
+                  ? Date.parse(apt.slot_start)
+                  : null;
+                const endMs = apt.slot_end ? Date.parse(apt.slot_end) : null;
+                const canJoin =
+                  startMs !== null &&
+                  endMs !== null &&
+                  Date.now() >= startMs - JOIN_EARLY_MS &&
+                  Date.now() <= endMs;
                 return (
                   <li
                     key={apt.id}
@@ -87,7 +102,7 @@ export default async function TeamMemberAppointmentsPage() {
                           <MessageSquare className="h-5 w-5 text-primary" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-medium">
                           {customer?.full_name ?? "Consumer"}
                         </p>
@@ -102,16 +117,34 @@ export default async function TeamMemberAppointmentsPage() {
                               })
                             : "Time to be confirmed"}
                         </p>
-                        <Badge variant="secondary" className="mt-1 capitalize">
-                          {apt.type}
-                        </Badge>
+                        {apt.concern ? (
+                          <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                            {apt.concern}
+                          </p>
+                        ) : null}
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <Badge variant="secondary" className="capitalize">
+                            {apt.type}
+                          </Badge>
+                          <Badge variant="outline" className="capitalize">
+                            {apt.status}
+                          </Badge>
+                        </div>
                       </div>
                     </div>
-                    <Button size="sm" asChild>
-                      <Link href={`/session/${apt.id}?origin=booking`}>
-                        {apt.type === "phone" ? "Start Call" : "Open Chat"}
-                      </Link>
-                    </Button>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {canJoin ? (
+                        <Button size="sm" asChild>
+                          <Link href={`/session/${apt.id}?origin=booking`}>
+                            {apt.type === "phone" ? "Start Call" : "Open Chat"}
+                          </Link>
+                        </Button>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Opens 15 min before
+                        </p>
+                      )}
+                    </div>
                   </li>
                 );
               })}

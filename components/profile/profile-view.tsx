@@ -62,9 +62,15 @@ export type Booking = {
   payment_option: string;
   concern: string | null;
   slot_start: string | null;
+  slot_end: string | null;
   status: string;
+  listener_id: string | null;
   updated_at: string | null;
 };
+
+// Customers (and listeners) can open a conversation from 15 minutes before the
+// slot start until the slot ends.
+const JOIN_EARLY_MS = 15 * 60_000;
 
 type DocumentRow = {
   id: string;
@@ -90,6 +96,8 @@ export function ProfileView({
   const [deleting, setDeleting] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
+  const [listenerNames, setListenerNames] = useState<Record<string, string>>({});
+  const [now, setNow] = useState(() => Date.now());
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
   const [loadingDocuments, setLoadingDocuments] = useState(true);
   const [rescheduleFor, setRescheduleFor] = useState<Booking | null>(null);
@@ -123,11 +131,33 @@ export function ProfileView({
     async function loadBookings() {
       const { data, error } = await supabase
         .from("bookings")
-        .select("id, type, payment_option, concern, slot_start, status, updated_at")
+        .select(
+          "id, type, payment_option, concern, slot_start, slot_end, status, listener_id, updated_at",
+        )
         .eq("user_id", profile.id)
         .order("slot_start", { ascending: false });
       if (!error && active) {
-        setBookings((data as Booking[]) ?? []);
+        const rows = (data as Booking[]) ?? [];
+        setBookings(rows);
+
+        // Resolve the matched listener's display name (RLS allows a customer
+        // to read the listener profile on their own booking).
+        const ids = Array.from(
+          new Set(rows.map((b) => b.listener_id).filter((v): v is string => !!v)),
+        );
+        if (ids.length > 0) {
+          const { data: listeners } = await supabase
+            .from("profiles")
+            .select("id, full_name")
+            .in("id", ids);
+          if (active && listeners) {
+            const map: Record<string, string> = {};
+            for (const l of listeners) {
+              if (l.full_name) map[l.id] = l.full_name;
+            }
+            setListenerNames(map);
+          }
+        }
       }
       if (active) setLoadingBookings(false);
     }
@@ -137,6 +167,13 @@ export function ProfileView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.id]);
+
+  // Keep the join window current so the "Join conversation" button appears
+  // exactly 15 minutes before the slot without needing a page refresh.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   async function handleCancelBooking(id: string) {
     if (!window.confirm("Cancel this booking?")) return;
@@ -205,7 +242,9 @@ export function ProfileView({
       // Refresh the local booking list.
       const { data: updated } = await supabase
         .from("bookings")
-        .select("id, type, payment_option, concern, slot_start, status, updated_at")
+        .select(
+          "id, type, payment_option, concern, slot_start, slot_end, status, listener_id, updated_at",
+        )
         .eq("user_id", profile.id)
         .order("slot_start", { ascending: false });
       if (updated) setBookings((updated as Booking[]) ?? []);
@@ -445,11 +484,17 @@ ${doc.summary ?? "No summary provided."}
                     <div className="space-y-4">
                       {upcomingBookings(bookings).map((b) => (
                         <BookingRow
-                        key={b.id}
-                        booking={b}
-                        onCancel={handleCancelBooking}
-                        onReschedule={openReschedule}
-                      />
+                          key={b.id}
+                          booking={b}
+                          now={now}
+                          listenerName={
+                            b.listener_id
+                              ? (listenerNames[b.listener_id] ?? null)
+                              : null
+                          }
+                          onCancel={handleCancelBooking}
+                          onReschedule={openReschedule}
+                        />
                       ))}
                       <Link href="/book-listener">
                         <Button variant="outline" className="w-full bg-transparent">
@@ -476,7 +521,16 @@ ${doc.summary ?? "No summary provided."}
                   ) : (
                     <div className="space-y-3">
                       {pastBookings(bookings).map((b) => (
-                        <BookingRow key={b.id} booking={b} />
+                        <BookingRow
+                          key={b.id}
+                          booking={b}
+                          now={now}
+                          listenerName={
+                            b.listener_id
+                              ? (listenerNames[b.listener_id] ?? null)
+                              : null
+                          }
+                        />
                       ))}
                     </div>
                   )}
@@ -814,10 +868,14 @@ function pastBookings(bookings: Booking[]) {
 
 function BookingRow({
   booking,
+  now,
+  listenerName,
   onCancel,
   onReschedule,
 }: {
   booking: Booking;
+  now?: number;
+  listenerName?: string | null;
   onCancel?: (id: string) => void;
   onReschedule?: (booking: Booking) => void;
 }) {
@@ -832,6 +890,21 @@ function BookingRow({
     : "Date TBD";
 
   const statusLabel = booking.status.charAt(0).toUpperCase() + booking.status.slice(1);
+
+  // A booked conversation can be opened from 15 minutes before the slot start
+  // until the slot ends.
+  const startMs = booking.slot_start ? Date.parse(booking.slot_start) : null;
+  const endMs = booking.slot_end ? Date.parse(booking.slot_end) : null;
+  const reference = now ?? Date.now();
+  const isUpcoming = startMs !== null && startMs > reference;
+  const canJoin =
+    booking.status === "confirmed" &&
+    !!booking.listener_id &&
+    startMs !== null &&
+    endMs !== null &&
+    reference >= startMs - JOIN_EARLY_MS &&
+    reference <= endMs;
+  const awaitingPayment = booking.payment_option === "paid" && booking.status === "pending";
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-4">
@@ -857,32 +930,61 @@ function BookingRow({
             Free conversation
           </span>
         ) : null}
+        {booking.listener_id ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {booking.listener_id
+              ? `With ${listenerName ?? "your listener"}`
+              : "Waiting for a listener to accept"}
+          </p>
+        ) : null}
+        {awaitingPayment && isUpcoming ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            <Link
+              href={`/payment?booking=${booking.id}`}
+              className="font-medium text-primary underline"
+            >
+              Complete payment to confirm
+            </Link>
+          </p>
+        ) : null}
       </div>
-      {(onCancel || onReschedule) &&
-      (booking.status === "pending" || booking.status === "confirmed") ? (
-        <div className="flex shrink-0 items-center gap-1">
-          {onReschedule && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onReschedule(booking)}
-              className="shrink-0"
-            >
-              Reschedule
-            </Button>
-          )}
-          {onCancel && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onCancel(booking.id)}
-              className="shrink-0 text-destructive hover:text-destructive"
-            >
-              Cancel
-            </Button>
-          )}
-        </div>
-      ) : null}
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        {canJoin && (
+          <Button size="sm" asChild>
+            <Link href={`/session/${booking.id}?origin=booking`}>
+              {booking.type === "phone" ? "Join Call" : "Join Chat"}
+            </Link>
+          </Button>
+        )}
+        {isUpcoming && !canJoin && !awaitingPayment && booking.listener_id ? (
+          <p className="text-xs text-muted-foreground">Opens 15 min before</p>
+        ) : null}
+        {(onCancel || onReschedule) &&
+        (booking.status === "pending" || booking.status === "confirmed") ? (
+          <div className="flex items-center gap-1">
+            {onReschedule && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onReschedule(booking)}
+                className="shrink-0"
+              >
+                Reschedule
+              </Button>
+            )}
+            {onCancel && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onCancel(booking.id)}
+                className="shrink-0 text-destructive hover:text-destructive"
+              >
+                Cancel
+              </Button>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

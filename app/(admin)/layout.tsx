@@ -17,6 +17,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 const adminNavItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/listeners", label: "Listeners", icon: Headphones },
+  { href: "/admin/bookings", label: "Bookings", icon: Calendar },
   { href: "/admin/sessions", label: "Sessions", icon: Calendar },
   { href: "/admin/users", label: "Users", icon: UserCircle },
   { href: "/admin/content", label: "Content", icon: FileText },
