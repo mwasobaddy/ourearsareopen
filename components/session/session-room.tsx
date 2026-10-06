@@ -89,6 +89,11 @@ export function SessionRoom({ origin, refId }: Props) {
   const [followUpConcern, setFollowUpConcern] = useState("");
   const [followUpSaving, setFollowUpSaving] = useState(false);
   const [followUpDone, setFollowUpDone] = useState(false);
+  const [calling, setCalling] = useState(false);
+  const [callState, setCallState] = useState<
+    "idle" | "placing" | "placed" | "ended"
+  >("idle");
+  const [callError, setCallError] = useState<string | null>(null);
   const autoEndRef = useRef(false);
   const endingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -226,6 +231,10 @@ export function SessionRoom({ origin, refId }: Props) {
     open();
     return () => {
       cancelled = true;
+      // Release the guard so a remount (React strict-mode double-invoke,
+      // route re-entry) can open the room again — `/api/session/open` is
+      // idempotent and returns the existing session.
+      joinedRef.current = false;
       channelRef.current.forEach((c) => {
         if (c) supabase.removeChannel(c);
       });
@@ -442,6 +451,57 @@ export function SessionRoom({ origin, refId }: Props) {
     }
   }
 
+  const isListener = !!session && session.listener_id === uid;
+  const isPhone = session?.mode === "phone";
+  const sessionOver = !!session && (session.status === "ended" || session.status === "completed");
+
+  async function handlePlaceCall() {
+    if (!session) return;
+    setCalling(true);
+    setCallError(null);
+    setCallState("placing");
+    try {
+      const res = await fetch("/api/twilio/call", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: session.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCallState("idle");
+        setCallError(data.error || "Couldn't place the call.");
+        return;
+      }
+      setCallState("placed");
+      toast.success("Calling the consumer now.");
+    } catch {
+      setCallState("idle");
+      setCallError("Couldn't place the call.");
+    } finally {
+      setCalling(false);
+    }
+  }
+
+  async function handleHangUp() {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/twilio/call", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: session.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setCallError(data.error || "Couldn't end the call.");
+        return;
+      }
+      setCallState("ended");
+      toast.success("Call ended.");
+    } catch {
+      setCallError("Couldn't end the call.");
+    }
+  }
+
   if (loading) {
     return (
       <Card>
@@ -534,12 +594,61 @@ export function SessionRoom({ origin, refId }: Props) {
       )}
 
       <CardContent className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-        <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          <UserPlus className="h-4 w-4 text-primary" />
-          {session.mode === "phone"
-            ? "Voice calls connect via the listener dialer (Twilio — client setup pending)."
-            : "Chat is live — messages appear in real time for both of you."}
-        </div>
+        {isPhone ? (
+          <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Phone className="h-4 w-4 text-primary" />
+              <span>
+                {isListener
+                  ? callState === "placed"
+                    ? "You're calling the consumer. Stay on this page until the conversation ends."
+                    : "When you're ready, call the consumer. Only the assigned listener places the call."
+                  : "Your listener will call you from our support number. Keep your phone nearby."}
+              </span>
+              {isListener && !sessionOver ? (
+                callState === "placed" ? (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={handleHangUp}
+                    className="ml-auto"
+                  >
+                    <Phone className="mr-2 h-4 w-4" />
+                    Hang up
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handlePlaceCall}
+                    disabled={calling}
+                    className="ml-auto"
+                  >
+                    {calling ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Phone className="mr-2 h-4 w-4" />
+                    )}
+                    Call consumer
+                  </Button>
+                )
+              ) : null}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Typing below still works as a fallback if the call doesn&apos;t
+              connect. {session.room_id?.startsWith("CA")
+                ? "Call in progress."
+                : "No call placed yet."}
+            </p>
+            {callError ? (
+              <p className="text-xs text-destructive">{callError}</p>
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+            <UserPlus className="h-4 w-4 text-primary" />
+            Chat is live — messages appear in real time for both of you.
+          </div>
+        )}
 
         {session.listener_id === uid && (
           <div className="rounded-lg border border-border bg-background p-3">
