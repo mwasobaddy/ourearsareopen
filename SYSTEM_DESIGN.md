@@ -683,6 +683,86 @@ _(Not applicable until this module is built. The steps below are the acceptance 
 
 ---
 
+## Module 14: SEO & Discoverability
+
+**Status:** 🟡 (on-page basics solid; **every technical SEO surface is missing**)
+
+> **Scope note:** SEO appears **nowhere** in `docs/SCOPE_OF_WORK.md` — no sitemap, robots, canonical, structured data, social cards, or performance requirements were ever asked for. The pages were built for humans, not crawlers. Documented here for agreement before any code is written. Note this is the fourth gap found in a row where prototype UI shipped without its receiving/connecting half (see **Module 12** hiring, **Module 13** contact).
+
+Whether people who need this service can find it through Google, a shared link, or a search result.
+
+### Measured baseline (Lighthouse, production homepage, 2026-10-06)
+`SEO 91 · Accessibility 96 · Best Practices 100 · Agentic Browsing 100` — **the 91 is misleading.** `robots-txt` and `canonical` both returned `scoreDisplayMode: notApplicable` because those artefacts do not exist, so Lighthouse only scored the handful of on-page checks it could find. Treat the real discoverability posture as unmeasured, not as 91.
+
+### Current state — what exists
+- [x] Unique `title` + `description` on **49 of 57** routes, all descriptions a sane 98–149 chars (no truncation risk)
+- [x] Exactly **one `<h1>`** on every public page tested (`/`, `/join-team`, `/contact`) with sane `h2` nesting
+- [x] **All 18 images carry `alt`** text
+- [x] Semantic landmarks (`header`/`nav`/`main`/`footer`), skip-to-content link, `lang="en"`, valid `hreflang`
+- [x] Crawlable anchors, page not blocked from indexing, clean HTTPS redirect
+- [x] Vercel Analytics installed (`app/layout.tsx:50`) — traffic analytics, **not** SEO
+
+### Gaps — 🔴 blockers
+- [ ] **No `/robots.txt`** (HTTP **404**) and no `app/robots.ts` — no crawler instructions at all
+- [ ] **No `/sitemap.xml`** (HTTP **404**) and no `app/sitemap.ts` — ~20 public routes with no sitemap, so nothing can be submitted or prioritised
+- [ ] **No `rel=canonical`** on any page, and **no `metadataBase`** — duplicate-URL signals cannot be consolidated
+- [ ] **No Open Graph or Twitter card tags** — verified zero `og:`/`twitter:` tags in `<head>`. Every share on Facebook/LinkedIn/X/WhatsApp/iMessage renders as a bare URL with no title, description, or image. For a service whose whole distribution model is "someone shares this link with a friend in need", this is the most costly single omission
+- [ ] **No favicon served** — `/favicon.ico` 404s. Icons exist (`public/apple-icon.png`, `public/icon.svg`, `public/icon-{light,dark}-32x32.png`) but are never wired into `metadata.icons`, so the browser tab shows a default globe
+
+### Gaps — 🟡 high
+- [ ] **No structured data (JSON-LD) anywhere** in the codebase. Missing `Organization` / `LocalBusiness` (name, address, hours, `hello@ourearsareopen.org`), and — highest value — **`JobPosting` for the six openings in Module 12**, which are textbook `JobPosting` material and could surface in Google Jobs
+- [ ] **Wrong canonical host.** Production serves on the auto-assigned `ourearsareopen.vercel.app`; no `.com` reference exists in code, while the client's own Stripe webhook URL (`docs/CLIENT_ACTION_REQUIRED.md` §1) already assumes `https://www.ourearsareopen.com`. Every share and citation uses a subdomain we do not control
+- [ ] **Non-descriptive link text** — the only Lighthouse SEO failure: 5 homepage anchors read **"Learn More"** (`/book-listener` ×2, `/crisis`, `/volunteer`, `/community`). Anchor text is how crawlers and screen readers learn page purpose; generic anchors across the four most important pages actively hurt
+- [ ] **Private portals are publicly indexable.** `middleware.ts:18-21` gates only `/super-admin` and `/admin`; **`/team-member/queue` returns HTTP 200 to anonymous visitors**, rendering the portal shell. No data leaks (its API calls correctly reject non-listeners), but a **listener portal can appear in Google results** — poor optics for a mental-health service, and it invites bot traffic
+- [ ] **No `robots.txt` disallow list** — `/api`, `/profile`, `/session`, `/payment` are all reachable by crawlers today
+
+### Gaps — 🟡 medium
+- [ ] **No `title.template`** in the root layout — every page hand-writes the `| Our Ears Are Open` suffix instead of inheriting it, so nothing is enforced centrally
+- [ ] **Legacy `keywords` array** in `app/layout.tsx:16-23` — a dead field Google has ignored since 2009. Harmless today (no page repeats it) but it should be removed so it isn't mistaken for an SEO lever
+- [ ] **Double `<h1>` on every portal page** — `components/dashboard/dashboard-header.tsx` renders the portal name as `<h1>` and each page adds its own, so `/team-member/queue` has "Team Member Portal" *and* "Chat Queue". Broken heading hierarchy (also an a11y issue)
+- [ ] **8 routes export no `metadata`** and silently inherit the root title/description: `app/page.tsx` (homepage), `app/community/[slug]`, `app/book-session`, `app/listener`, `app/workforce`, and the three portal index pages. The **homepage** inheriting "Our Ears Are Open | Compassionate Listening Support" is survivable, but a dynamic community slug page with no per-slug description/OG image is a missed share
+
+### Gaps — not yet measured
+- [ ] **Core Web Vitals unmeasured.** Lighthouse here excludes performance. For a service aimed at elderly users, crisis traffic, and low-end Android devices, **LCP and INP matter more than the 91**. Needs a real field measurement (Vercel Speed Insights or `web-vitals` reporting to an endpoint), not a lab score
+
+### Proposed build — ordered by value per hour, NOT started
+- [ ] **Attach the real domain** `ourearsareopen.com` → Vercel (client DNS action; everything below should land after this so canonicals and OG image URLs are built on the right host)
+- [ ] `app/robots.ts` — allow all, `disallow` `/api`, `/admin`, `/super-admin`, `/team-member`, `/profile`, `/session`, `/payment`, `/chat-queue`, and point at the sitemap
+- [ ] `app/sitemap.ts` — all public routes with `lastModified`, excluding authed/portal/noindex routes; submit in Google Search Console
+- [ ] `metadataBase` on the root layout + `alternates.canonical` per page
+- [ ] **Open Graph + Twitter card metadata** with a purpose-built 1200×630 share image (`app/opengraph-image.tsx` generated via `next/og`, brand colours from `--primary`/`--brown`), plus `metadata.icons` wiring the existing `public/apple-icon.png` / `icon.svg` so the favicon stops 404ing
+- [ ] **JSON-LD**: `Organization` + `LocalBusiness` sitewide, `JobPosting[]` generated from the `job_openings` table (depends on **Module 12**), `BreadcrumbList`, `WebSite`
+- [ ] `title.template: "%s | Our Ears Are Open"` in the root layout; add metadata to the 8 uncovered routes, starting with the homepage and `community/[slug]` (per-slug description + OG image)
+- [ ] Replace the 5 "Learn More" anchors with descriptive text (and sweep the rest of the site for the same pattern)
+- [ ] Gate `/team-member/*` in `middleware.ts` alongside `/admin` + `/super-admin`, and add `robots: { index: false }` to all three portals
+- [ ] Fix the double-`h1`: `dashboard-header.tsx` portal title becomes a non-heading element
+- [ ] Remove the dead `keywords` array
+- [ ] **Core Web Vitals instrumentation** — `web-vitals` reported to an API route + a small admin trend view, so LCP/INP/CLS are observed in the field for real users
+- [ ] Google Search Console + Bing Webmaster setup, and a `sitemap` ping on deploy
+
+### Questions
+- ❓ Do we own `ourearsareopen.com`, and who controls its DNS? (Blocking — canonical host, share URLs and the Stripe webhook all depend on it)
+- ❓ Is the site intended to be found via Google search, or is distribution word-of-mouth/social only? Changes how much effort items 2-3 deserve versus 4-5.
+- ❓ Is a Google Business Profile wanted? A LocalBusiness listing would matter for "listening support near me" style searches and would need the verified domain.
+- ❓ Which `.org` vs `.com` address is canonical for published contact details (`lib/site.ts:30` is `.org`; Resend sending is on `.com`)?
+- ❓ Any target regions or languages? Currently single-locale `en` with no `hreflang`.
+- ❓ Should the three portal areas be `noindex`, or fully blocked at the edge?
+
+### How to test — Module 14
+_(Not applicable until this module is built. The steps below are the acceptance checks to run once it is.)_
+1. `/robots.txt` returns 200 with the intended `Allow`/`Disallow` rules and a `Sitemap:` line; `/sitemap.xml` returns 200 and lists every public route
+2. Submit the sitemap in Google Search Console; confirm no disallowed routes appear as indexed
+3. Paste a page URL into the Facebook/LinkedIn/X sharing debugger — title, description and image all render
+4. `curl -s <page> | grep -i 'rel="canonical"'` returns an absolute URL on the real domain
+5. Google Rich Results Test accepts the `Organization` and `JobPosting` markup with no errors
+6. Browser tab and mobile home screen show the real icon; `/favicon.ico` no longer 404s
+7. Anonymous request to `/team-member/queue` redirects to `/login`; all three portals return `noindex`
+8. Every public page has exactly one `<h1>` and a unique `title`; no two pages share a description
+9. Lighthouse SEO re-run scores 100 and `robots-txt` / `canonical` now report as applicable passes (not `notApplicable`)
+10. Field Core Web Vitals (LCP/INP/CLS) are being collected and visible in the admin view, with p75 trending in the "good" band
+
+---
+
 ## Cross-Module Decisions & Architecture Notes
 
 This section captures decisions that span multiple modules. Revisit as you build.
