@@ -99,11 +99,13 @@ export type Database = {
       }
       bookings: {
         Row: {
+          assigned_at: string | null
           concern: string | null
           created_at: string
           id: string
           listener_id: string | null
           payment_intent_id: string | null
+          reminder_sent_at: string | null
           payment_option: string
           preferences: Json
           slot_end: string | null
@@ -114,11 +116,13 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          assigned_at?: string | null
           concern?: string | null
           created_at?: string
           id?: string
           listener_id?: string | null
           payment_intent_id?: string | null
+          reminder_sent_at?: string | null
           payment_option?: string
           preferences?: Json
           slot_end?: string | null
@@ -129,11 +133,13 @@ export type Database = {
           user_id: string
         }
         Update: {
+          assigned_at?: string | null
           concern?: string | null
           created_at?: string
           id?: string
           listener_id?: string | null
           payment_intent_id?: string | null
+          reminder_sent_at?: string | null
           payment_option?: string
           preferences?: Json
           slot_end?: string | null
