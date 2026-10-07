@@ -30,3 +30,6 @@ docs/Key_information.docx
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+# Local admin credentials, never commit
+admin-credentials.local.txt
+missing.md
