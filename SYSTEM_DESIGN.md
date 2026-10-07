@@ -981,7 +981,9 @@ Worth naming, because these are the parts that are hard to build and easy to bre
 
 **Status:** 🟡 comparison complete, nothing ported
 
-> **Context.** `dev.ourearsareopen.com` is a later build of the public-facing site than the one we hold. Every public route was fetched from both and diffed on 7 October 2026 (title, description, headings, calls to action, links, image alt text, form and input counts), plus a link-graph crawl of the newer build to find routes we do not have, and live browser tests on the forms it adds. The newer build is **frontend only**: it has no evidence of the API routes or migrations we hold, so it cannot replace our repository outright. Its value is content, copy and legal pages, which is what this module records.
+> **Context.** `dev.ourearsareopen.com` is a separate application with a richer public-facing design and a smaller backend. Every public route was fetched from both and diffed on 7 October 2026 (title, description, headings, calls to action, links, image alt text, form and input counts), a link-graph crawl found routes we do not have, and then we **signed in and compared the authenticated experience**, which is where the largest differences turned out to be.
+>
+> **The single most important conclusion of this module: the two are different applications, not different versions of one.** The newer build has its own datastore and its own auth, and it lacks the queue, session runtime, payments, voice, availability, reminders and booking assignment that make our site work. It cannot be published over ours. See "different applications" below. Its value is content, copy, legal pages and the community chat, all of which must be ported by hand.
 
 ### Route inventory differences
 **Present in the newer build, absent from ours (7 routes):**
@@ -1054,8 +1056,98 @@ Free (1 combined chat or phone session per week + 4 free queue sessions per week
 - Community page still shows unmeasured member and online counts
 - No signed-in password change for customers
 
+### 🔴 Corrected finding: the two builds are different applications, not different versions
+Signed in to `dev.ourearsareopen.com` on 7 October and probed its API surface. **It is a separate application with its own datastore**, not our codebase deployed later:
+
+- `GET /api/auth/me` returns an object with a **24-character hex id, not a UUID** — a different database from our Supabase `profiles` table. It carries `username`, `publicDisplayName`, `preferences`, `emailVerified`, `setupComplete`, `listenerPendingApproval`, and a full `membership` object our schema has no equivalent of.
+- Our production `profiles` row for the same person has `full_name: null`, `age_range: null`, `reason: null`, `services_consent: false` (**Module 16 Blocker 1**). Their record is populated. Two disjoint datasets.
+
+**API surface comparison:**
+
+| Capability | Ours | dev build |
+|---|---|---|
+| `POST/GET /api/bookings` | Working | Present (`GET` filters by `?status=`) |
+| `GET /api/bookings?status=upcoming\|past` | n/a | Present |
+| `GET /api/sessions` | Working | Present (returns empty) |
+| `GET /api/users/me` | n/a | Present |
+| `GET /api/auth/me` | n/a | Present |
+| `POST /api/bookings/follow-up` | Working | Present (POST only) |
+| `GET /api/admin/content/rooms` | Working | Present |
+| `PATCH /api/super-admin/users/{id}/role` | Working | Present |
+| **Open chat queue** (`/api/queue/*`) | Working | **404 — absent** |
+| **Live session runtime** (`/api/session/*`) | Working | **404 — absent** |
+| **Stripe payments** (`/api/stripe/*`) | Working | **404 — absent** |
+| **Voice calling** (`/api/twilio/*`) | Built | **404 — absent** |
+| **Listener availability** (`/api/availability`) | Working | **404 — absent** |
+| **Booking reminders cron** (`/api/email/reminders`) | Working | **404 — absent** |
+| **Booking assignment** (`/api/admin/bookings/assign`) | Working | **404 — absent** |
+
+**Consequence:** the newer build cannot be published over ours. Doing so would remove the queue, session rooms, payments, voice, availability, reminders and booking assignment, i.e. everything that currently works. Porting is a manual merge, not a deployment. This supersedes the earlier framing in this module that treated it as "a later build of the public-facing site".
+
+### 🔴 Corrected finding: three different prices, not two
+Earlier this module recorded a `$7.99` vs `$10.99` conflict. The authenticated data resolves what `$7.99` actually is and reveals a third number:
+
+- **Our production:** `$10.99` per conversation (`LISTENER_PRICE_CENTS`), queue minimum `$1`
+- **dev backend `pricing`:** `paidSessionCents: 599` (**$5.99**), `paidQueueMinCents: 100`, `queueUnlimitedFree: false`
+- **dev membership page:** Tier 1 `$7.99/mo` or `$90.00/yr`, Tier 2 `$10.99/mo` or `$125.00/yr`, Tier 3 `$15.99/mo` or `$185.00/yr`
+- **dev FAQ:** "Where does the $7.99 go?" → this is the **Tier 1 membership price**, not the session price
+
+So these are two different commercial models, not one product mispriced. dev has a subscription product with weekly entitlements; we have a one-off per-conversation charge. Needs a client decision before any copy or pricing is ported.
+
+### Authenticated experience comparison (the largest area of difference)
+Our profile has 4 tabs (Conversations, Documents, Info, Settings). The dev build has 6, each with a subtitle:
+
+| Tab | dev build content |
+|---|---|
+| My Sessions | Upcoming and past |
+| **Membership** | Plan, usage, billing, with live weekly counters and a Refresh control |
+| **Therapist Sessions** | Booked therapy sessions + Book a Therapist |
+| Documents | Session notes and files |
+| Profile Info | Personal details **and** background preferences, both with Edit controls |
+| Settings | Payment methods (Add Card), Notifications, Security ("password and two-factor authentication"), Privacy ("control your data and visibility") |
+
+Our Settings rows are inert (**Module 16**). Ours also has no editable profile fields, no membership and no therapist sessions. Membership entitlements read from the dev API: `remaining: { freeChat: 1, freePhone: 1, combinedFree: 1, queueJoins: 4 }`, with `usage` counters and `trialActive`. New accounts get a 7-day Tier 1 trial.
+
+### Community when signed in (contradicts part of Module 15)
+**Group chat exists and works on the newer build.** Verified by opening a room and posting:
+
+- Real messages with author, role badge (Member / Listener), and timestamp
+- **Live presence** ("1 online")
+- Composer with photo attachment, a "Keep it kind — this is a safe space" prompt
+- **Report on every message**, plus Like and Comment with threads
+- Moderation notice: "This room is moderated. Avoid personal contact details"
+- **The celebrations feed is real data** from their DB, including unmoderated test posts ("Hello", "cfvjhv jfvd")
+
+Access model differs: only `wins` and `general` are free (`/community/rooms/[slug]`); the other six link to `/membership?returnUrl=...`. Room URL pattern is `/community/rooms/[slug]`, so our `/community/[slug]` addresses 404 there. The `/membership` paywall target renders thinly. "Suggest a New Room" request form exists.
+
+**Module 15 correction:** group chat was assessed as "not started / coming soon" against *our* build. It is built on the newer build. Our gap remains real, but it is no longer an unimplemented feature in the wider project.
+
+### Sign-up differences (dev collects what we discard)
+- **Date of birth** via three selects (years 1906-2008) — real age verification, versus our unstored 18+ checkbox
+- **Optional username** with the warning "If you skip this, your real name may be shown publicly (for example in community areas)" — pseudonymity we have no equivalent of
+- **Confirm password** field and Show password toggles
+- Two-step flow: Step 1 Basic info, Step 2 Agreements
+- **Safeguarding declarations we do not collect at all:** "I am not in crisis, homicidal, suicidal, or abusing anyone, and I agree to our Terms of Service & Privacy Policy" and "I agree that I am 18 and older, and I understand that using these services under the age of 18 will require us to automatically block my account"
+- Registration verified working end to end, with a proper `/verify-email` holding page and a real confirmation email
+
+### Home page "Our Mission" section
+Identical heading and the same first three cards. The difference is the promise strip: ours reads **"No therapy — we are listeners"**; dev reads **"We are listeners who guide you in the next step of therapy if needed"**. dev adds a fourth card, "Therapy & your next step", and swaps the "Crisis Care" service card for "Therapist Support".
+
+**"5,000+ people heard this year" and "50+ caring listeners" appear on both builds.** Not fixed upstream.
+
+### Stories of Hope
+Both builds carry the same three attributed testimonials (Sarah M., James T., Maria L.), the first naming a listener ("Miss Lovely"). Given zero completed sessions in our system, these cannot be genuine customer stories. Flagged for the client on both builds.
+
+### FAQ: 4 questions on ours, 7 on dev
+Added on dev: **How long are the conversations?**, **Will you provide therapy if I want to speak to a therapist?**, **Where does the $7.99 go?**, **How do I go from a volunteer to a paid team member?** The last two of these answer the doubts a nervous visitor is most likely to have, and the volunteer-to-paid question directly supports recruitment.
+
 ### Questions for the client
-- ❓ Which price is correct, $7.99 or $10.99? Blocking for any copy port
+- ❓ Which pricing model: our $10.99 one-off, or the newer build's $5.99 session plus membership tiers? Blocking for any copy port
+- ❓ Adopt the "guide you to the next step of therapy" positioning, including the mission promise change?
+- ❓ Which recruitment list is correct?
+- ❓ Should community rooms stay free, or be gated as six of eight are upstream?
+- ❓ Are the four contact addresses live and monitored?
+- ❓ Should the username option and date of birth be adopted at sign up?
 - ❓ Adopt the "guide you to the next step of therapy" positioning?
 - ❓ Which recruitment list is correct?
 - ❓ Are the four contact addresses live and monitored?
