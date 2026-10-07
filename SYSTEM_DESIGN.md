@@ -153,7 +153,7 @@ In Supabase Dashboard → Storage → `avatars`, confirm a file exists at `<your
 
 ## Module 3: Booking (Scheduled Sessions)
 
-**Status:** 🟢
+**Status:** 🟡
 
 The book-listener multi-step flow: choose phone/chat type, concern, listener preferences, date/time, then payment. Creates a booking that persists in the DB, notifies listeners, and ends with a listener assigned and a live session the customer can join.
 
@@ -165,7 +165,7 @@ The book-listener multi-step flow: choose phone/chat type, concern, listener pre
 - [x] Booking page server-guarded: incomplete profile → redirect to `/profile/setup?next=/book-listener`
 - [x] List upcoming + past bookings on `/profile` Conversations tab (real data) with Cancel action
 - [x] End-to-end verified: create booking → list → cancel → RLS isolation → availability slots (via confirmed test user; cleaned up)
-- [x] Reschedule booking — `PATCH /api/bookings/[id]` + `GET /api/bookings/[id]/reschedule-options` + Reschedule button/dialog on the profile Conversations tab (frees old slot, claims a new one)
+- [~] Reschedule booking — UI, dialog and both endpoints exist, but **it cannot succeed**: `reschedule-options` lists from `availability_slots`, and nothing in the codebase ever inserts a row into that table (it has 0 rows). Always returns an empty list. See **Module 16**
 - [x] Feature-flag wiring — the booking flow honors `free_booking` (hides the "Free option") and `scheduled_phone` (hides the Phone conversation type) from `feature_flags`
 - [ ] Booking hold / time-lock while paying (needs payment timing from Module 4)
 - [x] Booking confirmations via email — free bookings confirm + email on creation; paid bookings confirm + email from the Stripe webhook
@@ -336,7 +336,7 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 - [x] **Debrief time** — completing a session pauses the listener's queue availability so they take a breather (re-enable manually)
 - [ ] Listener accounts: admin creates username; listener sets password on first login
 - [ ] Listener-only login + redirect to team portal
-- [x] In-session follow-up booking — `POST/GET /api/bookings/follow-up` + in-session "Schedule follow-up" dialog (free vs paid + the listener's own open slot); if paid → consumer emailed a payment link only (safe no-op until a verified Resend domain); 🔴 listener never sees payment
+- [~] In-session follow-up booking — dialog and `POST/GET /api/bookings/follow-up` exist, but the listener's slot list comes from `availability_slots`, which is always empty, so the dialog always says "You have no open times available" even after availability has been set. **Cannot complete a follow-up booking.** See **Module 16**
 - [ ] Start **voice** session from dashboard — 🔴 blocked (Twilio)
 
 ### Questions
@@ -349,7 +349,7 @@ The `/team-member` / workforce portal. Listener login (admin-created username + 
 4. `/team-member/availability` loads and saves the weekly schedule to `profiles.availability`.
 5. `/team-member/dashboard` shows weekly/monthly hours computed from the listener's completed sessions, the 15 hr/week capacity bar, and today's confirmed appointments with Open Chat/Start Call.
 6. The 15 hr/week cap is now **enforced** in `queue/toggle`, `queue/accept`, and `session/open` (blocked with a clear message near the cap). Completing a session pauses the listener's queue availability (debrief pause); they re-enable it manually.
-7. Remaining items (listener provisioning via username+first-login password, voice) are pending; voice additionally needs Twilio creds. In-session follow-up booking is wired; the paid email link only sends once a verified Resend domain is configured.
+7. Remaining items (listener provisioning, voice) are pending. In-session follow-up booking is **not** usable yet despite the dialog existing, because the underlying slot list is never populated (see **Module 16**). The verified Resend domain is now in place, so the paid follow-up email path is ready once slots exist.
 
 ---
 
@@ -372,7 +372,7 @@ Full session lifecycle, notes, history, documents, no-shows, reminders, post-ses
 - [x] Safety disconnect with reason — `POST /api/session/[id]/end` records `end_reason` and ends the session; end-reason dialog in `SessionRoom`
 - [x] Debrief pause — completing a session auto-pauses the listener's queue availability
 - [x] No-show handling — `POST /api/bookings/[id]/no-show` sets `booking_status = no_show` and frees the `availability_slots` slot; **Mark No-show** button on the listener dashboard
-- [x] Reschedule booking — `PATCH /api/bookings/[id]` (frees old slot, claims new) + `GET /api/bookings/[id]/reschedule-options` + Reschedule button/dialog in the profile "Conversations" tab
+- [~] Reschedule booking — UI and endpoints exist but are **non-functional** for the same reason as Module 3: no `availability_slots` rows are ever created. See **Module 16**
 - [x] Session-notes PDF / print export — **Download / Print** action on each document card (client-side printable window)
 - [x] Leave queue — `POST /api/queue/leave` (status → `left`, frees position) + Leave-queue button in `QueueStatus`
 - [x] Real listeners-available count — `getListenersAvailableCount()` (counts `open_queue_enabled` listeners) wired into the `ChatQueueWidget` on `/community` and `/chat-queue`
@@ -406,7 +406,7 @@ Operations portal: listener management, session oversight, reports, content, ref
 ### TO-DO
 - [x] Admin-only route protection (`/admin`) — `requireAdmin()` guard (admin/super_admin) on every admin page
 - [x] Admin dashboard stats (active listeners, today's sessions, queue waiting, 24h revenue) — real counts
-- [x] Listener management: list real listeners + add (auth + profile) + deactivate/reactivate (`is_active`)
+- [~] Listener management: list real listeners and deactivate/reactivate both work. **Add is broken**: `POST /api/admin/listeners` returns 500 because the `auth.users` signup trigger already creates the profile row and the route then tries to insert a second one (primary key collision). The account is created but left with role `customer`. See **Module 16**
 - [x] Monitor listener hours (weekly/monthly, 15hr cap) + hours — real from `sessions` (`lib/admin-data.ts`)
 - [x] Monitor chat + phone sessions (list, duration, status, consumer/listener) + status/type filters (`SessionsFilter`)
 - [x] User list (consumers): search, view profile, deactivate/reinstate (`is_active`)
@@ -836,6 +836,142 @@ _(15A can be verified now; the 15B steps apply once built.)_
 8. Report a message → it appears in `/admin` moderation queue; removing it, muting or banning the author takes effect immediately
 9. Age gate blocks an under-18 declared date of birth from joining, and the attempt is logged
 10. Deleting a member's account removes or anonymises their messages per the agreed retention policy
+
+---
+
+## Module 16: Flow Verification Findings (full system review, 7 October 2026)
+
+**Status:** 🔴 3 blockers found · 🟡 8 further gaps · test data removed after review
+
+Every user-facing flow was walked end to end in a real browser against production, with three test accounts (customer, listener, super admin) and a fourth temporary account to test sign-up. Findings are grouped by severity. This module exists because several items below were previously marked complete in this tracker and were **not** — those claims have been corrected in place (Modules 3, 6, 8, 9).
+
+### Verified working (no action)
+- All 53 application routes return successfully; no server errors
+- Sign-up validation is thorough: at least one service, terms agreement, 18+ confirmation and contact consent are all enforced
+- **Queue flow end to end**: pay to join -> entry created -> auto-assigned to the waiting listener -> live chat delivered in real time between two browsers -> notes saved -> session completed -> notes document created -> customer notified
+- Listener: toggle availability, weekly availability save/load, queue pool, accept
+- Admin/super-admin: every page loads; role change, deactivate/reactivate, feature flags, content room create + delete, notifications mark-read all work
+- Profile booking flow (book, pay/free, accept, join window, complete) verified previously
+- Notifications inbox renders real entries with timestamps
+- Payment guards: free bookings and already-paid bookings are refused
+
+### 🔴 Blocker 1: every new registration loses everything the user typed
+**Symptom.** A person signs up, enters first name, last name, email, age range, pronouns, reason for being there, selects services, ticks the terms agreement, confirms 18+ and consents to contact. When the account is created, **all of it is discarded**. The profile row exists with only an email address; `full_name`, `age_range`, `pronouns`, `reason` are null and `services_consent` is `false`.
+
+**Proof.** Tested with a new registration on production, and confirmed against the client's own existing account `kelvinramsiel01@gmail.com`, which has `full_name: null`, `age_range: null`, `reason: null`, `services_consent: false` despite being created through the real form. (Accounts created through the admin API are unaffected, which is why the super-admin account does show a name.)
+
+**Cause.** `components/auth/register-form.tsx:117` calls `supabase.from("profiles").upsert(...)` **before** checking whether a session exists, and never checks the upsert's error. When email confirmation is required (it is: `email_confirmed_at` is null on the new account) `signUp` returns a user but **no session**, so the upsert runs as an anonymous request, is rejected by the `profiles` RLS update policy, and fails silently.
+
+**Second, compounding bug.** `needsEmailConfirmation` at `:133` tests `data.user.identities?.length === 0`, which did not evaluate true in testing, so the "Check your email" panel never appeared. Instead the form announced "Account created!" and pushed to `/profile/setup`, which bounced the unverified, signed-out visitor to `/login?next=/profile/setup` with no explanation of why they cannot sign in.
+
+**Impact.** Sign-up is the entry point for every customer. Until this is fixed, no customer record has a name, the "match with the right listener" step has nothing to work from, admin user lists show blanks, and **we cannot evidence that anyone consented to be contacted or to the terms**.
+
+**Fix.** Persist the submitted profile fields on the server (an API route using the service role, keyed on the returned user id) rather than from the browser; surface and check the upsert error; correct the verification-branch condition; and make the "check your email" state reliable.
+
+### 🔴 Blocker 2: an admin cannot add a listener
+`POST /api/admin/listeners` returns **500 "Listener account created, but profile save failed."** The route creates the auth user, then `.insert()`s a profile row — but the `on_auth_user_created` trigger (`0001_auth_users.sql:42`) already created that row, so the insert collides on the primary key. Verified against production, and reproduced directly.
+
+**Net effect:** the account is created but has role `customer`, and the admin sees a server error. No listener has ever been created through the interface. This blocks Module 12 (hiring) end to end and contradicts the client's requirement to "approve, manage and add profiles".
+
+**Fix.** Upsert instead of insert and set `role`, `full_name`, `is_active`; better still, send a real Supabase invite so the new listener sets their own password (see Module 12).
+
+### 🔴 Blocker 3: `availability_slots` is never populated, so follow-up booking and rescheduling cannot work
+**Symptom.** A listener sets weekly availability (e.g. Tuesday 09:00 to 12:00). Inside a live session, "Schedule follow-up" reports "You have no open times available. Add availability in the Availability page first." The same is true of booking reschedule: the options list is always empty.
+
+**Cause.** The portal stores a *weekly recurring* pattern in `profiles.availability` (JSON). But the booking code reads *concrete bookable windows* from the `availability_slots` table. **No code anywhere inserts into `availability_slots`** — every call site is a `select`, an `update` (claim/release) or a `delete`. The table has 0 rows and can never gain any. The missing piece is a step that materialises the next N days of bookable windows from each listener's weekly pattern.
+
+**Impact.** Two features that this tracker previously marked complete cannot be used by anyone:
+- in-session follow-up booking (Module 6)
+- booking reschedule (Module 3, Module 8)
+
+**Fix.** A scheduled or on-demand materialisation job that expands `profiles.availability` into `availability_slots` for the next 14 days, skipping existing bookings; plus a backfill for existing listeners.
+
+### 🟡 Further gaps found
+- **Team-member profile page shows fabricated data.** `app/(team-member)/team-member/profile/page.tsx:14-21` is commented `// Mock data` and renders a fictional listener, "Sarah Johnson", with 8.5 hours this week, 12 calls and 18 chats. Every listener who opens their own profile sees someone else's invented record. The team-member *dashboard* is real, so the portal contradicts itself.
+- **Profile "Settings" tab does nothing.** Three rows in `components/profile/profile-view.tsx:674-730` are `<button>` elements with no handler: Notifications ("Email and SMS preferences"), Security ("Password and sign-in") and Payment Methods ("coming soon"). There is no notification-preference storage anywhere in the schema, and no in-app password change for a signed-in user (only the emailed `/reset-password` route). A customer cannot change their password or their contact preferences.
+- **Team-member Settings page is also inert** — "Configure" (notifications) and "Update Password" buttons at `app/(team-member)/team-member/settings/page.tsx:32,48` do nothing.
+- **Google and Apple sign-in buttons do nothing** — `app/login/page.tsx:90,93` are `type="button"` with no handler, presented under "OR CONTINUE WITH".
+- **Four team-member pages render for signed-out visitors** — `queue`, `availability`, `settings`, `profile` have no auth check and `middleware.ts` gates only `/admin` and `/super-admin`. No data leaks (their API calls correctly reject non-listeners) but the shells are public and indexable.
+- **Sign-up asks for consent to documents that do not exist.** The registration form requires ticking "I agree to the Privacy Policy and Terms of Service" with links to `/privacy` and `/terms`, both of which 404. The same links appear in the footer, on the payment page and on the sign-up page: 6 references to 3 missing pages.
+- **The service preference a customer chooses at sign-up is discarded.** "chat / phone / both" is written only to auth metadata; there is no `services` column on `profiles` and nothing reads it back, so the answer is never stored or used for matching.
+- **Age confirmation is collected but not stored.** The 18+ checkbox exists at sign-up, but no date of birth or age field exists on `profiles`, so the confirmation cannot be evidenced later (this also underpins the "legal minimum age" claim discussed in Module 15).
+- **A disabled link swallows its own click** — `components/community/chat-queue-widget.tsx:122`: "Connect Now" is a `<Link>` wrapping a `disabled` button, so when no listener is available the link cannot be clicked and no explanation is shown.
+
+### Notes on scope
+- The Stripe card field cannot be automated in this environment, so a full card payment was not driven end to end. Everything downstream of payment was verified by seeding a succeeded payment record and exercising the real endpoints.
+- Two abandoned `payments` rows belonging to the super-admin account (`requires_payment_method`, from 4 September and 6 October) pre-date this review and were left untouched.
+- All five test accounts created for this review, and every booking, session, message, document, notification, queue entry, payment and availability row created with them, were deleted afterwards. The database is back to its previous state plus the two admin accounts the client asked for.
+
+### How to test — Module 16
+1. Register a brand-new account through the public form with every field completed -> profile row shows the submitted name, age range, pronouns, reason and consent; a "check your email" state is shown and the visitor is not dumped on the login page
+2. As an admin, add a listener -> 201, the profile has role `listener`, and the new account receives a set-your-password email
+3. As a listener, set weekly availability -> within one cycle, bookable windows appear and `availability_slots` has rows for that listener
+4. In a live session, "Schedule follow-up" lists real open times and a follow-up booking can be created (free and paid)
+5. As a customer, reschedule a booking -> real alternative times are offered and the booking moves
+6. Open `/team-member/profile` as a listener -> shows that listener's real name and hours, never "Sarah Johnson"
+7. Open the profile Settings tab -> notifications, security and payment rows open real screens, and a password can be changed
+8. Sign out, then request `/team-member/queue` -> redirected to login
+9. Sign-up consent links open real Privacy and Terms pages
+10. Register with chat selected, then inspect the profile -> the service preference is stored and used for matching
+
+---
+
+## UI & UX Recommendations (consolidated, reviewed 7 October 2026)
+
+Collected from the flow review and the accessibility and search passes. Grouped by theme, roughly in the order they matter. Nothing here is a blocker; these improve trust, clarity and usability.
+
+### 1. Truthfulness and trust (do first)
+- **Remove or clearly label invented figures.** The hardcoded "5,000+ people helped", "50+ trained listeners", "82 people active right now", the 847 member counts and the five invented "Wins" testimonials. Either delete them or label them explicitly as examples. See **Module 15** and the home page note in **Module 16**
+- **Audit every marketing claim against something measurable.** "Join thousands who have found support" also appears on `/register`. Where a figure is genuinely true of the organisation, say what is being counted; where it is not, replace it with a real count from the database
+- **Show real state instead of reassurance.** Where a feature is not live, say so plainly and offer the working alternative. The current pattern ("Coming soon" panels, disabled buttons with no explanation) reads as brokenness
+
+### 2. Feedback and error handling
+- **Every submit needs three states**: working, success, failure. The three dead forms fail silently; the donation form shows a generic error for what is really a sign-in requirement
+- **Explain failures in plain words.** "Unauthorized" from the donation payment should read as "Please sign in to donate, it takes about twenty seconds"
+- **Never discard what someone typed.** Losing a long concern description or a written introduction because of a failure is the worst possible outcome on a form like these
+- **Add a loading state to every button** that triggers work. Several admin and portal actions give no indication anything is happening
+
+### 3. Navigation and wayfinding
+- **Collapse the main menu earlier.** At roughly 1024 to 1280 pixels the seven links, Crisis Help, Log In and Sign Up all render and the labels wrap to two lines. Collapsing at about 1100 pixels fixes tablets and small laptops
+- **Shorten two or three labels.** "Book a Listener", "Chat Queue" and "Join Our Team" are the longest
+- **Give the footer legal links real pages**, and stop asking people to agree to them at sign-up while they 404
+- **Add a visible "you are signed in as X" state** with role, so a listener or admin never wonders which account they are in. The portals currently show only "Team Member Portal" or "Administration"
+
+### 4. Dead controls must not look alive
+Seven dead controls were found. A button that looks clickable and does nothing is worse than no button:
+- profile Settings rows (notifications, security, payment methods), team-member Settings rows, and the Google and Apple sign-in buttons should either work or be visibly unavailable with a reason
+- Where a feature is planned, say what is planned and when, rather than showing an inert control
+
+### 5. Forms and input
+- **Label every control properly.** The intro-video group on the volunteer and application forms has no associated labels, and a file input cannot be labelled by placeholder alone, so screen readers announce nothing
+- **Enforce what the label promises.** The resume field says "required" on both application forms but does not enforce it
+- **Collect what the process needs.** Phone number is needed for phone conversations but is not collected at application; date of birth is needed to evidence the 18+ claim but is not collected
+- **Warn before losing work** on long forms if someone tries to leave
+- **Show progress** on multi-step forms such as the five-step booking flow, which currently gives no sense of how much is left
+
+### 6. Accessibility
+- **Fix colour contrast.** Lighthouse flags the pill badges and inline links on the home page. The warm brown palette needs its lighter text shades darkened for text use
+- **Fix the double heading.** Portal pages render two `h1` elements, one from the layout header and one from the page. The layout title should not be a heading
+- **Invalid markup in buttons.** Several places wrap a `<Button>` inside a `<Link>` without `asChild`, producing a button nested inside an anchor. Use one or the other
+- **Announce dynamic changes.** Success and error messages need to be announced to screen readers, not only shown
+- **Respect reduced motion.** Several decorative animations (the pulsing "active now" dot, `animate-ping`) should stop for visitors who ask for reduced motion
+
+### 7. Content and tone
+- **Say what happens next, everywhere.** After booking, after applying, after sending a message: what you will do, when you will do it, and what they should do if it does not arrive
+- **Replace jargon.** "1099", "legal minimum age" and "debrief time" appear to customers and volunteers with no explanation
+- **Be consistent about the promise.** The Contact page promises a reply within 24 hours, which nothing currently enforces or measures
+- **Correct the domain references.** The footer advertises `hello@ourearsareopen.org` while sending is configured on `.com`, and the Stripe instructions assume `ourearsareopen.com`
+
+### 8. Search and sharing
+Covered in detail in **Module 14**. The short version: connect the real domain, add a sitemap and robots file, add social sharing cards with the logo, and give the five "Learn More" links real descriptions.
+
+### 9. What is genuinely working well and should be protected
+Worth naming, because these are the parts that are hard to build and easy to break:
+- The booking flow is now clear end to end, with sensible validation and a fair free option
+- The session room is calm and uncluttered, with a visible timer, a clear way to end, and safety reasons recorded
+- The listener's tools (notes, follow-up, complete) sit together and are easy to find
+- Crisis resources are reachable from every page, and the crisis button is persistent
+- The skip-to-content link, landmarks and heading structure are sound on public pages
 
 ---
 
