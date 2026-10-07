@@ -33,3 +33,4 @@ next-env.d.ts
 # Local admin credentials, never commit
 admin-credentials.local.txt
 missing.md
+missingui.md
