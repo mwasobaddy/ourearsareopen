@@ -776,6 +776,8 @@ _(Not applicable until this module is built. The steps below are the acceptance 
 4. The room page then states **"Community rooms are coming soon"** and offers the 1:1 alternatives. There is no group chat.
 
 ### Gaps — 🔴 trust (fix regardless of any build decision)
+
+> **Update 7 October (see Module 17):** the newer build at `dev.ourearsareopen.com` has already **removed the five invented testimonials** and relabelled the section "Live feed". It still shows the invented member and online counts. The removal is worth porting; the counts are not.
 - [ ] **Invented member counts presented as fact.** `DEFAULT_ROOM_META` is a hardcoded map in **two** files (`app/community/page.tsx:50-59`, `app/community/[slug]/page.tsx:37-61`) giving all 8 rooms member counts and "online" counts. They sum to **847 members** and **82 online**, and the hero renders that total as **"82 people active right now"** behind an animated live-pulse dot. Verified in the production HTML on 2026-10-06 (`\"82\",\" people active right now`). A visitor — including one in distress deciding whether this space is populated — is shown a fabricated headcount
 - [ ] **Invented member testimonials.** The "Wins Being Shared Right Now" feed (`app/community/page.tsx:61-92`) is a hardcoded array of five first-person posts about mental-health wins, with fabricated relative timestamps ("2 min ago", "5 min ago" …). Verified verbatim in production: *"Finally said no to overtime this week. Small win but it felt huge!"*, *"Got the job I've been hoping for — had to share with people who get it!"*, *"Day 30 of my morning routine…"*. **Publishing invented member quotes as real activity on a mental-health service is the most damaging defect in this module** — it undermines the credibility of every genuine member post later, and a visitor who recognises the fiction may distrust the service entirely
 - [ ] **Two divergent copies of the same fabricated data.** Any edit to one `DEFAULT_ROOM_META` desynchronises the directory and the room page
@@ -890,7 +892,7 @@ Every user-facing flow was walked end to end in a real browser against productio
 - **Team-member profile page shows fabricated data.** `app/(team-member)/team-member/profile/page.tsx:14-21` is commented `// Mock data` and renders a fictional listener, "Sarah Johnson", with 8.5 hours this week, 12 calls and 18 chats. Every listener who opens their own profile sees someone else's invented record. The team-member *dashboard* is real, so the portal contradicts itself.
 - **Profile "Settings" tab does nothing.** Three rows in `components/profile/profile-view.tsx:674-730` are `<button>` elements with no handler: Notifications ("Email and SMS preferences"), Security ("Password and sign-in") and Payment Methods ("coming soon"). There is no notification-preference storage anywhere in the schema, and no in-app password change for a signed-in user (only the emailed `/reset-password` route). A customer cannot change their password or their contact preferences.
 - **Team-member Settings page is also inert** — "Configure" (notifications) and "Update Password" buttons at `app/(team-member)/team-member/settings/page.tsx:32,48` do nothing.
-- **Google and Apple sign-in buttons do nothing** — `app/login/page.tsx:90,93` are `type="button"` with no handler, presented under "OR CONTINUE WITH".
+- **Google and Apple sign-in buttons do nothing** — *already removed in the newer build (Module 17), so this is a port rather than new work* — `app/login/page.tsx:90,93` are `type="button"` with no handler, presented under "OR CONTINUE WITH".
 - **Four team-member pages render for signed-out visitors** — `queue`, `availability`, `settings`, `profile` have no auth check and `middleware.ts` gates only `/admin` and `/super-admin`. No data leaks (their API calls correctly reject non-listeners) but the shells are public and indexable.
 - **Sign-up asks for consent to documents that do not exist.** The registration form requires ticking "I agree to the Privacy Policy and Terms of Service" with links to `/privacy` and `/terms`, both of which 404. The same links appear in the footer, on the payment page and on the sign-up page: 6 references to 3 missing pages.
 - **The service preference a customer chooses at sign-up is discarded.** "chat / phone / both" is written only to auth metadata; there is no `services` column on `profiles` and nothing reads it back, so the answer is never stored or used for matching.
@@ -972,6 +974,107 @@ Worth naming, because these are the parts that are hard to build and easy to bre
 - The listener's tools (notes, follow-up, complete) sit together and are easy to find
 - Crisis resources are reachable from every page, and the crisis button is persistent
 - The skip-to-content link, landmarks and heading structure are sound on public pages
+
+---
+
+## Module 17: UI Comparison Against the Newer Build (dev.ourearsareopen.com)
+
+**Status:** 🟡 comparison complete, nothing ported
+
+> **Context.** `dev.ourearsareopen.com` is a later build of the public-facing site than the one we hold. Every public route was fetched from both and diffed on 7 October 2026 (title, description, headings, calls to action, links, image alt text, form and input counts), plus a link-graph crawl of the newer build to find routes we do not have, and live browser tests on the forms it adds. The newer build is **frontend only**: it has no evidence of the API routes or migrations we hold, so it cannot replace our repository outright. Its value is content, copy and legal pages, which is what this module records.
+
+### Route inventory differences
+**Present in the newer build, absent from ours (7 routes):**
+
+| Route | Status | Notes |
+|---|---|---|
+| `/privacy` | Real content | 10 sections: collection, use, sharing, security, cookies, retention, rights, third parties, changes, contact |
+| `/terms` | Real content | 9 sections including payments and refunds, confidentiality, limitation of liability |
+| `/accessibility` | Real content | Commitment, conformance status, features, known limitations, technical specs, feedback |
+| `/book-therapist` | Holding page | New primary nav item; "coming soon, partnering with licensed therapists" |
+| `/therapist-apply` | Form, **non-functional** | Legal identity, contact, credentials, jurisdiction, languages, 4 written questions, 2 file uploads; submits nothing |
+| `/listener-signup` | **Stub** | ~15kb, no form, no inputs, no buttons |
+| `/membership` | **Stub** | No content, no headings; linked from `/book-listener` |
+
+Also present only on the newer build: `public/home-hero.jpg`, `public/speak-less-listen-more.png`, and `mission-photo.png` (we ship `.jpg`).
+
+**Present in ours, absent from the newer build:**
+- `/donate/success` — the post-donation thank-you page. The newer build **404s here**, so a donor who has just paid would land on an error page if we adopted it as-is.
+
+### 🔴 Commercial conflict: the two builds quote different prices
+The newer build's About page FAQ asks *"Where does the $7.99 go?"* and answers that it funds the workforce. Our live site charges **$10.99** (`LISTENER_PRICE_CENTS`, enforced by `POST /api/stripe/payment-intent`). Publishing the newer copy against the current payment configuration would tell customers one price and charge another. **Must be resolved before any copy is ported.** Documented for the client as a question, not assumed.
+
+### 🔴 Recruitment content is entirely different
+| Our build advertises (6) | Newer build advertises (7) |
+|---|---|
+| Therapists | Community Outreach |
+| Licensed Therapists | Social Media Manager |
+| Counselors | Team Communication Manager |
+| Community Outreach Manager | **HR Manager** |
+| Social Media Management | **Therapist Director** |
+| Team Communication Member | **Charitable Organization Leader** |
+
+The newer build also **removes clinical roles from staff positions** and adds a separate "Therapists & Counselors / Join as a Licensed Professional" section routing to `/therapist-apply`, with CTAs "Sign Up as a Listener" and "Sign Up as a Therapist". Structurally better, but it is a different recruitment model and needs the client's decision.
+
+### Positioning and messaging differences
+- Home H1: newer **"We are listeners who guide you to the next step of therapy if needed"** vs ours "Sometimes you just need someone to truly hear you."
+- Title/description: newer "Compassionate listening & support" with a therapy-referral description; ours "Compassionate Listening Support" / "Accessible, inclusive listening support for adults 18+"
+- `/about` team card: newer "Listeners, not therapists, but we do guide you to the next step when needed" vs ours "We Are Listeners, Not Therapists"
+- New fourth home value card "Therapy & your next step"; service card "Crisis Care" replaced by "Therapist Support"
+- Home CTAs: newer "Get Started, It's Free" + "Become a Volunteer"; ours "Book a Listener" + "Join Our Team"
+- `/community` renamed "Community Chat"; H1 shortened to "Celebrate Yourself. Share Your Wins."; celebrations section relabelled "Live feed"; new "Log In to Request a Room" flow for suggesting a room
+- Footer: newer exposes four role addresses (`support@`, `businessinquiry@`, `billing@`, `mediaoutreach@` @ourearsareopen.com) vs our single `hello@ourearsareopen.org`; address line differs (`Ste 206` vs `Ste 206 #3019`)
+
+### Membership tiers (newer build only, display only)
+Free (1 combined chat or phone session per week + 4 free queue sessions per week), Tier 1 (3 chat + 1 phone), Tier 2 (3 chat + 3 phone), Tier 3 (5 chat + 5 phone). No prices shown, no billing or membership records behind them, and the copy contains a typo ("you don't need a change plans to book"). Labelled "Optional reference only".
+
+### Improvements in the newer build worth porting
+1. **The three legal pages exist** — closes the gap recorded in **Module 13** and **Module 14**
+2. **Dead Google and Apple sign-in buttons removed** (we still have them, per **Module 16**)
+3. **Proper `<h1>` added to `/login` and `/register`** — ours have none
+4. **Invented community testimonials removed** (replaced with a "Live feed" label) — ours still show five, per **Module 15**
+5. **Genuinely descriptive image alt text** on the home page
+6. **Clearer crisis copy**: "Call or text 988 for the national suicide prevention lifeline"
+7. **`/book-listener` is readable without signing in** — ours redirects to login before showing anything
+8. **Four role-based contact addresses**
+9. **A far better designed therapist application form** (still inert)
+
+### Regressions in the newer build
+1. `/volunteer` and `/workforce-apply` **lost their own title and description**, falling back to the site default (worse for search than ours)
+2. Those forms are also reduced to 5 inputs from our 7
+3. `/membership` and `/listener-signup` are empty stubs
+4. `/therapist-apply` also has no metadata of its own
+5. **The invented community member and online counts remain** — only the comments were removed
+6. **No `/donate/success` page** (404)
+7. **Monthly giving removed entirely** (ours still shows a tab that does not work)
+
+### Defects shared by both builds
+- Contact, volunteer and workforce-apply forms still submit nothing
+- Home page still claims "5,000+ people helped" and "50+ trained listeners"
+- Community page still shows unmeasured member and online counts
+- No signed-in password change for customers
+
+### Questions for the client
+- ❓ Which price is correct, $7.99 or $10.99? Blocking for any copy port
+- ❓ Adopt the "guide you to the next step of therapy" positioning?
+- ❓ Which recruitment list is correct?
+- ❓ Are the four contact addresses live and monitored?
+- ❓ Should membership tiers exist, and at what price?
+- ❓ Build out `/listener-signup`, or remove it until it has content?
+- ❓ Should `/volunteer` keep its specific page title (better for search) or the newer generic one?
+
+### Proposed work, NOT started
+- [ ] Port `/privacy`, `/terms`, `/accessibility` and the updated footer, after legal review of the copy
+- [ ] Remove the dead social sign-in buttons; add `<h1>` to `/login` and `/register`
+- [ ] Port the improved image alt text and the clearer crisis strip
+- [ ] Allow anonymous access to view `/book-listener` while still requiring sign-in to submit
+- [ ] Add the four role-based contact addresses, once monitored
+- [ ] Apply the resolved price to copy, Stripe configuration and the booking page together
+- [ ] Rebuild the recruitment page around the confirmed role list and the two-track model
+- [ ] Build `/book-therapist` as a real therapist booking flow (currently a holding page)
+- [ ] Build `/membership` only once pricing, entitlements and billing exist
+- [ ] Decide whether `/listener-signup` is built or removed
+- [ ] Preserve `/donate/success` and `/donate`'s working payment path when porting
 
 ---
 
